@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'com.example.gogdownloader'
+    namespace 'com.termux'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.example.gogdownloader"
+        applicationId "com.termux"
         minSdk 24
         targetSdk 34
         versionCode 1
