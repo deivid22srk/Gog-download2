@@ -120,7 +120,7 @@ public class InstallationService extends Service {
 
                 binFiles.add(0, setupFile); // Process setup file first
 
-                DocumentFile installDir = safDownloadManager.getInstallDirectory();
+                DocumentFile installDir = safDownloadManager.getDownloadDirectory();
                 if (installDir == null) {
                     throw new IOException("Installation directory not configured.");
                 }
