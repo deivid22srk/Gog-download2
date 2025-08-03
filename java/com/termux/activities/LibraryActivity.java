@@ -8,6 +8,9 @@ import android.content.IntentFilter;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
 import android.text.Editable;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -264,6 +267,21 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     }
 
     private void launchTermuxForInstallation() {
+        try {
+            File termuxDir = new File("/data/data/com.termux/files/home/.termux");
+            if (!termuxDir.exists()) {
+                termuxDir.mkdirs();
+            }
+            File propertiesFile = new File(termuxDir, "termux.properties");
+            try (FileWriter writer = new FileWriter(propertiesFile)) {
+                writer.write("allow-external-apps=true\n");
+            }
+        } catch (IOException e) {
+            Log.e("LibraryActivity", "Failed to create termux.properties file", e);
+            Toast.makeText(this, "Failed to configure Termux.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         Intent intent = new Intent();
         intent.setClassName("com.termux", "com.termux.app.RunCommandService");
         intent.setAction("com.termux.RUN_COMMAND");
