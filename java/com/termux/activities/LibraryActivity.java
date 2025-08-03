@@ -265,10 +265,13 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
 
     private void launchTermuxForInstallation() {
         Intent intent = new Intent();
-        intent.setComponent(new ComponentName("com.termux", "com.termux.app.TermuxActivity"));
+        intent.setClassName("com.termux", "com.termux.app.RunCommandService");
         intent.setAction("com.termux.RUN_COMMAND");
-        intent.putExtra("com.termux.RUN_COMMAND_COMMAND", "termux-setup-storage && if ! command -v innoextract &> /dev/null; then pkg install -y innoextract; fi");
-        startActivity(intent);
+        intent.putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash");
+        intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", "termux-setup-storage && if ! command -v innoextract &> /dev/null; then pkg install -y innoextract; fi"});
+        intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home");
+        intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
+        startService(intent);
     }
     
     private void checkPermissions() {
