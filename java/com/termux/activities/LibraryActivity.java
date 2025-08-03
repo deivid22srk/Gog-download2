@@ -1,6 +1,7 @@
 package com.termux.activities;
 
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -241,7 +242,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     private void setupClickListeners() {
         refreshButton.setOnClickListener(v -> refreshLibrary());
         retryButton.setOnClickListener(v -> loadLibrary());
-        installFab.setOnClickListener(v -> openInstallerFolderPicker());
+        installFab.setOnClickListener(v -> launchTermuxForInstallation());
         
         // Configurar SearchEditText
         searchEditText.addTextChangedListener(new TextWatcher() {
@@ -260,6 +261,14 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 // Não é necessário
             }
         });
+    }
+
+    private void launchTermuxForInstallation() {
+        Intent intent = new Intent();
+        intent.setComponent(new ComponentName("com.termux", "com.termux.app.TermuxActivity"));
+        intent.setAction("com.termux.RUN_COMMAND");
+        intent.putExtra("com.termux.RUN_COMMAND_COMMAND", "termux-setup-storage && if ! command -v innoextract &> /dev/null; then pkg install -y innoextract; fi");
+        startActivity(intent);
     }
     
     private void checkPermissions() {
