@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
+import android.provider.Settings;
 import android.text.Editable;
 import java.io.File;
 import java.io.FileWriter;
@@ -90,6 +91,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     private BroadcastReceiver installProgressReceiver;
 
     private ActivityResultLauncher<Intent> installerFolderPickerLauncher;
+    private ActivityResultLauncher<Intent> overlayPermissionLauncher;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -246,6 +248,17 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         refreshButton.setOnClickListener(v -> refreshLibrary());
         retryButton.setOnClickListener(v -> loadLibrary());
         installFab.setOnClickListener(v -> launchTermuxForInstallation());
+
+        overlayPermissionLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (Settings.canDrawOverlays(this)) {
+                    launchTermuxForInstallation();
+                } else {
+                    Toast.makeText(this, "A permissão para sobrepor outros apps é necessária para iniciar o Termux.", Toast.LENGTH_SHORT).show();
+                }
+            }
+        );
         
         // Configurar SearchEditText
         searchEditText.addTextChangedListener(new TextWatcher() {
@@ -267,6 +280,13 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     }
 
     private void launchTermuxForInstallation() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName()));
+            overlayPermissionLauncher.launch(intent);
+            return;
+        }
+
         try {
             File termuxDir = new File("/data/data/com.termux/files/home/.termux");
             if (!termuxDir.exists()) {
