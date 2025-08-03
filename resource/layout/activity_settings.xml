@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:orientation="vertical">
+
+    <!-- Toolbar -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:title="@string/settings_title"
+        app:titleTextColor="?attr/colorOnSurface"
+        android:background="?attr/colorSurface"
+        app:navigationIcon="?attr/homeAsUpIndicator" />
+
+    <!-- Settings Content -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Download Settings Section -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Storage"
+                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                        android:layout_marginBottom="16dp" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Current Download Folder"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:layout_marginBottom="8dp" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/safPathText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Not selected"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:background="?attr/colorSurfaceContainerLowest"
+                        android:padding="12dp"
+                        android:layout_marginBottom="12dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/changeSafFolderButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Change Folder"
+                        style="@style/Widget.Material3.Button.TonalButton" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Account Settings Section -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Conta"
+                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- User Email -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="12dp">
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Email:"
+                            android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/userEmailText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="usuario@email.com"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    </LinearLayout>
+
+                    <!-- Logout Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/logoutButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/logout"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_marginTop="8dp" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- App Settings Section -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Aplicativo"
+                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- App Version -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="12dp">
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Versão:"
+                            android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/appVersionText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="1.0.0"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    </LinearLayout>
+
+                    <!-- Clear Cache Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/clearCacheButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Limpar Cache"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_marginTop="8dp" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Save Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/saveButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/save_settings"
+                style="@style/Widget.Material3.Button"
+                android:layout_marginTop="16dp" />
+
+        </LinearLayout>
+
+    </ScrollView>
+
+</LinearLayout>

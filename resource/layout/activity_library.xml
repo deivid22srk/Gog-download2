@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:title="@string/library_title"
+            app:titleTextColor="?attr/colorOnSurface"
+            android:background="?attr/colorSurface"
+            app:popupTheme="?attr/actionBarPopupTheme" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <!-- Content Area -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <!-- User Info Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/userInfoCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/userAvatar"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="16dp"
+                    android:src="@drawable/ic_account_circle"
+                    android:background="@drawable/image_border"
+                    android:padding="1dp"
+                    android:contentDescription="User Avatar" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/userNameText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Nome do Usuário"
+                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/gameCountText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0 jogos na biblioteca"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/refreshButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/refresh"
+                    style="@style/Widget.Material3.Button.TonalButton" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Search Bar -->
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginBottom="8dp"
+            app:hintEnabled="false"
+            app:startIconDrawable="@drawable/ic_search">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/searchEditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/search_games_hint"
+                android:imeOptions="actionSearch"
+                android:inputType="text" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Games List -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/gamesRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:padding="8dp"
+                android:clipToPadding="false"
+                android:scrollbars="vertical" />
+
+            <!-- Loading State -->
+            <LinearLayout
+                android:id="@+id/loadingLayout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <ProgressBar
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:indeterminateTint="?attr/colorPrimary" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/loading_library"
+                    android:textAppearance="?attr/textAppearanceBodyLarge"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+            </LinearLayout>
+
+            <!-- Empty State -->
+            <LinearLayout
+                android:id="@+id/emptyLayout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
+                    android:layout_marginBottom="24dp"
+                    android:src="@drawable/ic_image"
+                    android:alpha="0.5"
+                    android:contentDescription="Empty Library" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/no_games"
+                    android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textAlignment="center" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/retryButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/retry"
+                    style="@style/Widget.Material3.Button" />
+
+            </LinearLayout>
+
+        </FrameLayout>
+
+    </LinearLayout>
+
+    <!-- Floating Action Button for Settings -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/installFab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"
+        android:src="@android:drawable/ic_menu_upload"
+        android:contentDescription="Instalar Jogo"
+        app:backgroundTint="?attr/colorPrimaryContainer"
+        app:tint="?attr/colorOnPrimaryContainer" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

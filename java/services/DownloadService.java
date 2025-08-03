@@ -1,0 +1,1180 @@
+package com.example.gogdownloader.services;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+import android.os.IBinder;
+import android.util.Log;
+
+import androidx.core.app.NotificationCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
+import com.example.gogdownloader.R;
+import com.example.gogdownloader.activities.LibraryActivity;
+import com.example.gogdownloader.api.GOGLibraryManager;
+import com.example.gogdownloader.database.DatabaseHelper;
+import com.example.gogdownloader.models.DownloadLink;
+import com.example.gogdownloader.models.Game;
+import com.example.gogdownloader.utils.PreferencesManager;
+import com.example.gogdownloader.utils.SAFDownloadManager;
+import com.example.gogdownloader.utils.SpeedMeter;
+
+import androidx.documentfile.provider.DocumentFile;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import android.content.ContentValues;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+
+public class DownloadService extends Service {
+    
+    private static final String TAG = "DownloadService";
+    
+    // Actions
+    public static final String ACTION_DOWNLOAD_PROGRESS = "com.example.gogdownloader.DOWNLOAD_PROGRESS";
+    private static final String ACTION_DOWNLOAD = "com.example.gogdownloader.DOWNLOAD";
+    private static final String ACTION_DOWNLOAD_MULTIPLE = "com.example.gogdownloader.DOWNLOAD_MULTIPLE";
+    private static final String ACTION_PAUSE = "com.example.gogdownloader.PAUSE";
+    private static final String ACTION_RESUME = "com.example.gogdownloader.RESUME";
+    private static final String ACTION_RESUME_DOWNLOADS = "com.example.gogdownloader.RESUME_DOWNLOADS";
+    private static final String ACTION_CANCEL = "com.example.gogdownloader.CANCEL";
+    private static final String ACTION_STOP_SERVICE = "com.example.gogdownloader.STOP_SERVICE";
+    
+    // Extras
+    public static final String EXTRA_GAME_ID = "extra_game_id";
+    public static final String EXTRA_BYTES_DOWNLOADED = "extra_bytes_downloaded";
+    public static final String EXTRA_TOTAL_BYTES = "extra_total_bytes";
+    public static final String EXTRA_CURRENT_FILE_INDEX = "extra_current_file_index";
+    public static final String EXTRA_TOTAL_FILES = "extra_total_files";
+    public static final String EXTRA_DOWNLOAD_SPEED = "extra_download_speed";
+    public static final String EXTRA_ETA = "extra_eta";
+    private static final String EXTRA_GAME = "extra_game";
+    private static final String EXTRA_DOWNLOAD_LINK = "extra_download_link";
+    private static final String EXTRA_DOWNLOAD_LINKS = "extra_download_links";
+    
+    // Notification
+    private static final String CHANNEL_ID = "download_channel";
+    private static final int NOTIFICATION_ID = 1000;
+    
+    private NotificationManager notificationManager;
+    private ExecutorService executorService;
+    private Map<Long, DownloadTask> activeDownloads;
+    private Map<Long, BatchDownloadTask> activeBatchDownloads;
+    
+    private GOGLibraryManager libraryManager;
+    private DatabaseHelper databaseHelper;
+    private PreferencesManager preferencesManager;
+    private SAFDownloadManager safDownloadManager;
+    private OkHttpClient httpClient;
+    
+    public static Intent createDownloadIntent(Context context, Game game, DownloadLink downloadLink) {
+        Intent intent = new Intent(context, DownloadService.class);
+        intent.setAction(ACTION_DOWNLOAD);
+        intent.putExtra(EXTRA_GAME, game);
+        intent.putExtra(EXTRA_DOWNLOAD_LINK, downloadLink);
+        return intent;
+    }
+    
+    public static Intent createMultipleDownloadIntent(Context context, Game game, List<DownloadLink> downloadLinks) {
+        Intent intent = new Intent(context, DownloadService.class);
+        intent.setAction(ACTION_DOWNLOAD_MULTIPLE);
+        intent.putExtra(EXTRA_GAME, game);
+        intent.putExtra(EXTRA_DOWNLOAD_LINKS, new ArrayList<>(downloadLinks));
+        return intent;
+    }
+    
+    public static Intent createCancelIntent(Context context, long gameId) {
+        Intent intent = new Intent(context, DownloadService.class);
+        intent.setAction(ACTION_CANCEL);
+        intent.putExtra(EXTRA_GAME_ID, gameId);
+        return intent;
+    }
+
+    public static Intent createPauseIntent(Context context, long gameId) {
+        Intent intent = new Intent(context, DownloadService.class);
+        intent.setAction(ACTION_PAUSE);
+        intent.putExtra(EXTRA_GAME_ID, gameId);
+        return intent;
+    }
+
+    public static Intent createResumeIntent(Context context, long gameId) {
+        Intent intent = new Intent(context, DownloadService.class);
+        intent.setAction(ACTION_RESUME);
+        intent.putExtra(EXTRA_GAME_ID, gameId);
+        return intent;
+    }
+    
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        
+        notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        executorService = Executors.newFixedThreadPool(3); // Máximo 3 downloads simultâneos
+        activeDownloads = new HashMap<>();
+        activeBatchDownloads = new HashMap<>();
+        
+        libraryManager = new GOGLibraryManager(this);
+        databaseHelper = new DatabaseHelper(this);
+        preferencesManager = new PreferencesManager(this);
+        safDownloadManager = new SAFDownloadManager(this);
+        
+        // Configurar cliente HTTP otimizado para downloads rápidos
+        httpClient = new OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)  // Timeout de conexão mais rápido
+                .readTimeout(60, TimeUnit.SECONDS)     // Timeout de leitura otimizado
+                .writeTimeout(30, TimeUnit.SECONDS)    // Timeout de escrita otimizado
+                .connectionPool(new okhttp3.ConnectionPool(10, 5, TimeUnit.MINUTES)) // Pool de conexões
+                .retryOnConnectionFailure(true)       // Retry automático em falhas
+                .followRedirects(true)                 // Seguir redirects automaticamente
+                .followSslRedirects(true)
+                .build();
+        
+        createNotificationChannel();
+        
+        // Retomar downloads pendentes
+        resumePendingDownloads();
+        
+        Log.d(TAG, "DownloadService created");
+    }
+    
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent == null) {
+            return START_NOT_STICKY;
+        }
+        
+        String action = intent.getAction();
+        
+        if (ACTION_DOWNLOAD.equals(action)) {
+            Game game = (Game) intent.getSerializableExtra(EXTRA_GAME);
+            DownloadLink downloadLink = (DownloadLink) intent.getSerializableExtra(EXTRA_DOWNLOAD_LINK);
+            if (game != null && downloadLink != null) {
+                startDownload(game, downloadLink);
+            }
+        } else if (ACTION_DOWNLOAD_MULTIPLE.equals(action)) {
+            Game game = (Game) intent.getSerializableExtra(EXTRA_GAME);
+            @SuppressWarnings("unchecked")
+            List<DownloadLink> downloadLinks = (List<DownloadLink>) intent.getSerializableExtra(EXTRA_DOWNLOAD_LINKS);
+            if (game != null && downloadLinks != null && !downloadLinks.isEmpty()) {
+                startBatchDownload(game, downloadLinks);
+            }
+        } else if (ACTION_RESUME_DOWNLOADS.equals(action)) {
+            Log.d(TAG, "Received RESUME_DOWNLOADS action");
+            // Não fazer nada aqui, o resumePendingDownloads() já foi chamado no onCreate
+        } else if (ACTION_PAUSE.equals(action)) {
+            long gameId = intent.getLongExtra(EXTRA_GAME_ID, -1);
+            if (gameId != -1) {
+                pauseDownload(gameId);
+            }
+        } else if (ACTION_RESUME.equals(action)) {
+            long gameId = intent.getLongExtra(EXTRA_GAME_ID, -1);
+            if (gameId != -1) {
+                resumeDownload(gameId);
+            }
+        } else if (ACTION_CANCEL.equals(action)) {
+            long gameId = intent.getLongExtra(EXTRA_GAME_ID, -1);
+            if (gameId != -1) {
+                cancelDownload(gameId);
+            }
+        } else if (ACTION_STOP_SERVICE.equals(action)) {
+            stopService();
+        }
+        
+        return START_STICKY;
+    }
+    
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null; // Serviço não precisa de binding
+    }
+    
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        
+        // Cancelar todos os downloads ativos
+        for (DownloadTask task : activeDownloads.values()) {
+            task.cancel();
+        }
+        
+        for (BatchDownloadTask task : activeBatchDownloads.values()) {
+            task.cancel();
+        }
+        
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.shutdown();
+        }
+        
+        if (httpClient != null) {
+            httpClient.dispatcher().executorService().shutdown();
+            httpClient.connectionPool().evictAll();
+        }
+        
+        if (databaseHelper != null) {
+            databaseHelper.close();
+        }
+        
+        Log.d(TAG, "DownloadService destroyed");
+    }
+    
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID,
+                    getString(R.string.download_channel_name),
+                    NotificationManager.IMPORTANCE_LOW
+            );
+            channel.setDescription(getString(R.string.download_channel_description));
+            channel.setShowBadge(true);
+            
+            notificationManager.createNotificationChannel(channel);
+        }
+    }
+    
+    private void startDownload(Game game, DownloadLink downloadLink) {
+        Log.d(TAG, "Starting download for game: " + game.getTitle());
+
+        if (activeDownloads.containsKey(game.getId())) {
+            Log.w(TAG, "Game is already being downloaded: " + game.getTitle());
+            return;
+        }
+
+        // Insert a record for this download and get its ID
+        long downloadId = databaseHelper.insertDownload(
+                game.getId(),
+                downloadLink.getId(),
+                downloadLink.getFileName(),
+                downloadLink.getUrl()
+        );
+
+        if (downloadId == -1) {
+            onDownloadError(game, "Failed to create download record in database.");
+            return;
+        }
+
+        // Update game status
+        game.setStatus(Game.DownloadStatus.DOWNLOADING);
+        databaseHelper.updateGame(game);
+
+        // Create initial notification
+        showDownloadNotification(game, 0, "Starting download...");
+        startForeground(NOTIFICATION_ID + (int) game.getId(),
+                createDownloadNotification(game, 0, "Starting download..."));
+
+        // Get the real download URL and then start the task
+        libraryManager.getDownloadLink(game.getId(), downloadLink, "installer",
+                new GOGLibraryManager.DownloadLinkCallback() {
+            @Override
+            public void onSuccess(String downloadUrl) {
+                downloadLink.setDownloadUrl(downloadUrl);
+                DownloadTask task = new DownloadTask(game, downloadLink, downloadId);
+                activeDownloads.put(game.getId(), task);
+                executorService.execute(task);
+            }
+
+            @Override
+            public void onError(String error) {
+                onDownloadError(game, "Failed to get download URL: " + error);
+                databaseHelper.updateDownloadStatus(downloadId, "FAILED", error);
+            }
+        });
+    }
+    
+    private void startBatchDownload(Game game, List<DownloadLink> downloadLinks) {
+        Log.d(TAG, "Starting batch download for game: " + game.getTitle() + " with " + downloadLinks.size() + " files");
+        
+        // Check if already downloading
+        if (activeBatchDownloads.containsKey(game.getId())) {
+            Log.w(TAG, "Game is already being downloaded: " + game.getTitle());
+            return;
+        }
+        
+        // Update status in db
+        game.setStatus(Game.DownloadStatus.DOWNLOADING);
+        databaseHelper.updateGame(game);
+        
+        // Create initial notification
+        showBatchDownloadNotification(game, 0, downloadLinks.size(), "Iniciando downloads...");
+        
+        // Start as foreground service
+        startForeground(NOTIFICATION_ID + (int) game.getId(),
+                createBatchDownloadNotification(game, 0, downloadLinks.size(), "Iniciando downloads..."));
+        
+        // Create and start batch download task
+        BatchDownloadTask batchTask = new BatchDownloadTask(game, downloadLinks);
+        activeBatchDownloads.put(game.getId(), batchTask);
+        executorService.execute(batchTask);
+    }
+    
+    private void resumePendingDownloads() {
+        Log.d(TAG, "Checking for pending downloads to resume...");
+        
+        executorService.execute(() -> {
+            try {
+                // Buscar downloads ativos no banco de dados
+                List<ContentValues> activeDownloads = databaseHelper.getActiveDownloads();
+                
+                if (activeDownloads.isEmpty()) {
+                    Log.d(TAG, "No pending downloads found");
+                    return;
+                }
+                
+                Log.d(TAG, "Found " + activeDownloads.size() + " pending downloads");
+                
+                // Agrupar downloads por jogo
+                Map<Long, List<ContentValues>> downloadsByGame = new HashMap<>();
+                for (ContentValues download : activeDownloads) {
+                    long gameId = download.getAsLong("game_id");
+                    downloadsByGame.computeIfAbsent(gameId, k -> new ArrayList<>()).add(download);
+                }
+                
+                for (Map.Entry<Long, List<ContentValues>> entry : downloadsByGame.entrySet()) {
+                    long gameId = entry.getKey();
+                    List<ContentValues> gameDownloads = entry.getValue();
+                    
+                    Game game = databaseHelper.getGame(gameId);
+                    if (game == null) {
+                        Log.w(TAG, "Game not found for ID: " + gameId + ", cleaning up downloads");
+                        // Limpar downloads órfãos
+                        for (ContentValues download : gameDownloads) {
+                            long downloadId = download.getAsLong("id");
+                            databaseHelper.updateDownloadStatus(downloadId, "CANCELLED", "Game not found");
+                        }
+                        continue;
+                    }
+                    
+                    if (gameDownloads.size() == 1) {
+                        // Download único
+                        ContentValues download = gameDownloads.get(0);
+                        resumeSingleDownload(game, download);
+                    } else {
+                        // Batch download
+                        resumeBatchDownload(game, gameDownloads);
+                    }
+                }
+                
+            } catch (Exception e) {
+                Log.e(TAG, "Error resuming pending downloads", e);
+            }
+        });
+    }
+    
+    private void resumeSingleDownload(Game game, ContentValues downloadData) {
+        try {
+            String linkId = downloadData.getAsString("link_id");
+            String fileName = downloadData.getAsString("file_name");
+            String downloadUrl = downloadData.getAsString("download_url");
+
+            DownloadLink downloadLink = new DownloadLink();
+            downloadLink.setId(linkId);
+            downloadLink.setName(fileName);
+            downloadLink.setDownloadUrl(downloadUrl);
+            
+            Log.d(TAG, "Resuming single download: " + game.getTitle() + " - " + fileName);
+            
+            startDownload(game, downloadLink);
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Error resuming single download for game: " + game.getTitle(), e);
+        }
+    }
+    
+    private void resumeBatchDownload(Game game, List<ContentValues> downloads) {
+        try {
+            List<DownloadLink> downloadLinks = new ArrayList<>();
+            
+            for (ContentValues downloadData : downloads) {
+                String linkId = downloadData.getAsString("link_id");
+                String fileName = downloadData.getAsString("file_name");
+                String downloadUrl = downloadData.getAsString("download_url");
+                
+                DownloadLink downloadLink = new DownloadLink();
+                downloadLink.setId(linkId);
+                downloadLink.setName(fileName);
+                downloadLink.setDownloadUrl(downloadUrl);
+                
+                downloadLinks.add(downloadLink);
+            }
+            
+            Log.d(TAG, "Resuming batch download: " + game.getTitle() + " - " + downloadLinks.size() + " files");
+            
+            startBatchDownload(game, downloadLinks);
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Error resuming batch download for game: " + game.getTitle(), e);
+        }
+    }
+
+    private void pauseDownload(long gameId) {
+        Log.d(TAG, "Pausing download for game ID: " + gameId);
+        DownloadTask task = activeDownloads.get(gameId);
+        if (task != null) {
+            task.pause();
+        }
+    }
+
+    private void resumeDownload(long gameId) {
+        Log.d(TAG, "Resuming download for game ID: " + gameId);
+        Game game = databaseHelper.getGame(gameId);
+        if (game != null) {
+            // To resume, we essentially just start the download again.
+            // The service will pick up the persisted progress.
+            ContentValues downloadData = databaseHelper.getDownload(gameId);
+            if (downloadData != null) {
+                DownloadLink link = new DownloadLink();
+                link.setId(downloadData.getAsString("link_id"));
+                link.setName(downloadData.getAsString("file_name"));
+                link.setUrl(downloadData.getAsString("download_url"));
+                startDownload(game, link);
+            }
+        }
+    }
+
+    private void cancelDownload(long gameId) {
+        Log.d(TAG, "Cancelling download for game ID: " + gameId);
+        
+        DownloadTask task = activeDownloads.get(gameId);
+        BatchDownloadTask batchTask = activeBatchDownloads.get(gameId);
+        
+        if (task != null) {
+            task.cancel();
+            activeDownloads.remove(gameId);
+        }
+        
+        if (batchTask != null) {
+            batchTask.cancel();
+            activeBatchDownloads.remove(gameId);
+        }
+        
+        if (task != null || batchTask != null) {
+            // Atualizar status no banco
+            Game game = databaseHelper.getGame(gameId);
+            if (game != null) {
+                game.setStatus(Game.DownloadStatus.NOT_DOWNLOADED);
+                game.setDownloadProgress(0);
+                databaseHelper.updateGame(game);
+            }
+            
+            // Remover notificação
+            notificationManager.cancel(NOTIFICATION_ID + (int) game.getId());
+            
+            // Parar foreground se não há mais downloads
+            if (activeDownloads.isEmpty() && activeBatchDownloads.isEmpty()) {
+                stopForeground(true);
+            }
+        }
+    }
+    
+    private void stopService() {
+        Log.d(TAG, "Stopping download service");
+        
+        // Cancelar todos os downloads
+        Set<Long> allGameIds = new HashSet<>();
+        allGameIds.addAll(activeDownloads.keySet());
+        allGameIds.addAll(activeBatchDownloads.keySet());
+        
+        for (long gameId : allGameIds) {
+            cancelDownload(gameId);
+        }
+        
+        stopSelf();
+    }
+    
+    private void onDownloadProgress(Game game, long bytesDownloaded, long totalBytes) {
+        onDownloadProgress(game, bytesDownloaded, totalBytes, 0, 0, 0, 0);
+    }
+    
+    private void onDownloadProgress(Game game, long bytesDownloaded, long totalBytes, 
+                                   int currentFileIndex, int totalFiles, double speed, long eta) {
+        int progress = totalBytes > 0 ? (int) ((bytesDownloaded * 100) / totalBytes) : 0;
+        
+        // Atualizar banco de dados
+        game.setDownloadProgress(bytesDownloaded);
+        game.setTotalSize(totalBytes);
+        databaseHelper.updateGame(game);
+        
+        // Atualizar notificação
+        String progressText;
+        if (totalFiles > 1) {
+            // Batch download
+            String speedText = speed > 0 ? String.format(" - %.1f MB/s", speed / (1024 * 1024)) : "";
+            String etaText = eta > 0 ? String.format(" - ETA: %s", formatETA(eta)) : "";
+            progressText = String.format("Arquivo %d/%d - %d%% - %s / %s%s%s", 
+                    currentFileIndex + 1, totalFiles, progress,
+                    Game.formatFileSize(bytesDownloaded),
+                    Game.formatFileSize(totalBytes),
+                    speedText, etaText);
+            showBatchDownloadNotification(game, currentFileIndex, totalFiles, progressText);
+        } else {
+            // Single download
+            String speedText = speed > 0 ? String.format(" - %.1f MB/s", speed / (1024 * 1024)) : "";
+            String etaText = eta > 0 ? String.format(" - ETA: %s", formatETA(eta)) : "";
+            progressText = String.format("%d%% - %s / %s%s%s", 
+                    progress,
+                    Game.formatFileSize(bytesDownloaded),
+                    Game.formatFileSize(totalBytes),
+                    speedText, etaText);
+            showDownloadNotification(game, progress, progressText);
+        }
+
+        Intent intent = new Intent(ACTION_DOWNLOAD_PROGRESS);
+        intent.putExtra(EXTRA_GAME_ID, game.getId());
+        intent.putExtra(EXTRA_BYTES_DOWNLOADED, bytesDownloaded);
+        intent.putExtra(EXTRA_TOTAL_BYTES, totalBytes);
+        intent.putExtra(EXTRA_CURRENT_FILE_INDEX, currentFileIndex);
+        intent.putExtra(EXTRA_TOTAL_FILES, totalFiles);
+        intent.putExtra(EXTRA_DOWNLOAD_SPEED, (float)speed);
+        intent.putExtra(EXTRA_ETA, eta);
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+    }
+    
+    private String formatETA(long etaSeconds) {
+        if (etaSeconds < 60) {
+            return etaSeconds + "s";
+        } else if (etaSeconds < 3600) {
+            return (etaSeconds / 60) + "m " + (etaSeconds % 60) + "s";
+        } else {
+            long hours = etaSeconds / 3600;
+            long minutes = (etaSeconds % 3600) / 60;
+            return hours + "h " + minutes + "m";
+        }
+    }
+    
+    private void onDownloadComplete(Game game, long downloadId, String filePath) {
+        Log.d(TAG, "Download completed for game: " + game.getTitle());
+        
+        // Atualizar status no banco
+        game.setStatus(Game.DownloadStatus.DOWNLOADED);
+        game.setLocalPath(filePath);
+        databaseHelper.updateGame(game);
+        databaseHelper.updateDownloadStatus(downloadId, "COMPLETED", null);
+        
+        // Remover da lista de downloads ativos
+        activeDownloads.remove(game.getId());
+        
+        // Mostrar notificação de conclusão
+        showCompletionNotification(game);
+        
+        // Parar foreground se não há mais downloads
+        if (activeDownloads.isEmpty() && activeBatchDownloads.isEmpty()) {
+            stopForeground(true);
+        }
+    }
+    
+    private void onDownloadError(Game game, String error) {
+        Log.e(TAG, "Download failed for game: " + game.getTitle() + " - " + error);
+        
+        // Atualizar status no banco
+        game.setStatus(Game.DownloadStatus.FAILED);
+        databaseHelper.updateGame(game);
+        
+        // Remover da lista de downloads ativos
+        activeDownloads.remove(game.getId());
+        activeBatchDownloads.remove(game.getId());
+        
+        // Mostrar notificação de erro
+        showErrorNotification(game, error);
+        
+        // Parar foreground se não há mais downloads
+        if (activeDownloads.isEmpty() && activeBatchDownloads.isEmpty()) {
+            stopForeground(true);
+        }
+    }
+    
+    private void showDownloadNotification(Game game, int progress, String progressText) {
+        Notification notification = createDownloadNotification(game, progress, progressText);
+        notificationManager.notify(NOTIFICATION_ID + (int) game.getId(), notification);
+    }
+    
+    private Notification createDownloadNotification(Game game, int progress, String progressText) {
+        Intent intent = new Intent(this, LibraryActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        
+        Intent cancelIntent = createCancelIntent(this, game.getId());
+        PendingIntent cancelPendingIntent = PendingIntent.getService(this, (int) game.getId(), 
+                cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(getString(R.string.downloading_game, game.getTitle()))
+                .setContentText(progressText)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setProgress(100, progress, progress == 0)
+                .setContentIntent(pendingIntent)
+                .addAction(android.R.drawable.ic_delete, 
+                        getString(R.string.cancel), cancelPendingIntent)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .build();
+    }
+    
+    private void showCompletionNotification(Game game) {
+        Intent intent = new Intent(this, LibraryActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        
+        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(getString(R.string.download_complete, game.getTitle()))
+                .setContentText("Download concluído com sucesso")
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .build();
+        
+        notificationManager.notify(NOTIFICATION_ID + (int) game.getId(), notification);
+    }
+    
+    private void showErrorNotification(Game game, String error) {
+        Intent intent = new Intent(this, LibraryActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        
+        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(getString(R.string.download_failed, game.getTitle()))
+                .setContentText(error)
+                .setSmallIcon(android.R.drawable.stat_notify_error)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .build();
+        
+        notificationManager.notify(NOTIFICATION_ID + (int) game.getId(), notification);
+    }
+    
+    private void showBatchDownloadNotification(Game game, int currentFileIndex, int totalFiles, String progressText) {
+        Notification notification = createBatchDownloadNotification(game, currentFileIndex, totalFiles, progressText);
+        notificationManager.notify(NOTIFICATION_ID + (int) game.getId(), notification);
+    }
+    
+    private Notification createBatchDownloadNotification(Game game, int currentFileIndex, int totalFiles, String progressText) {
+        Intent intent = new Intent(this, LibraryActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        
+        Intent cancelIntent = createCancelIntent(this, game.getId());
+        PendingIntent cancelPendingIntent = PendingIntent.getService(this, (int) game.getId(), 
+                cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        
+        int overallProgress = totalFiles > 0 ? (int) (((currentFileIndex * 100.0) / totalFiles)) : 0;
+        
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(getString(R.string.downloading_game, game.getTitle()))
+                .setContentText(progressText)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setProgress(100, overallProgress, false)
+                .setContentIntent(pendingIntent)
+                .addAction(android.R.drawable.ic_delete, 
+                        getString(R.string.cancel), cancelPendingIntent)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .build();
+    }
+    
+    // Classe interna para gerenciar o download de um arquivo
+    private class DownloadTask implements Runnable {
+        private Game game;
+        private DownloadLink downloadLink;
+        private long downloadId;
+        private volatile boolean cancelled = false;
+        private volatile boolean paused = false;
+        private SpeedMeter speedMeter = new SpeedMeter();
+        
+        public DownloadTask(Game game, DownloadLink downloadLink, long downloadId) {
+            this.game = game;
+            this.downloadLink = downloadLink;
+            this.downloadId = downloadId;
+        }
+        
+        public void cancel() {
+            cancelled = true;
+        }
+
+        public void pause() {
+            paused = true;
+        }
+        
+        @Override
+        public void run() {
+            databaseHelper.updateDownloadStatus(downloadId, "DOWNLOADING", null);
+            try {
+                downloadFile();
+            } catch (Exception e) {
+                if (!cancelled && !paused) {
+                    Log.e(TAG, "Download error", e);
+                    onDownloadError(game, e.getMessage());
+                    databaseHelper.updateDownloadStatus(downloadId, "FAILED", e.getMessage());
+                } else if (paused) {
+                    databaseHelper.updateDownloadStatus(downloadId, "PAUSED", null);
+                } else {
+                    databaseHelper.updateDownloadStatus(downloadId, "CANCELLED", null);
+                }
+            }
+        }
+        
+        private void downloadFile() throws IOException {
+            String downloadUrl = downloadLink.getDownloadUrl();
+            if (downloadUrl == null || downloadUrl.isEmpty()) {
+                throw new IOException("URL de download inválida");
+            }
+            
+            Log.d(TAG, "Starting download using SAF for: " + game.getTitle());
+            
+            // Tentar usar SAF primeiro
+            if (safDownloadManager.hasDownloadLocationConfigured()) {
+                downloadFileUsingSAF();
+            } else {
+                // Fallback para método legado
+                downloadFileLegacy();
+            }
+        }
+        
+        private void downloadFileUsingSAF() throws IOException {
+            Log.d(TAG, "Using SAF for download: " + game.getTitle());
+            
+            // Check for existing progress to determine if it's a resume
+            ContentValues downloadData = databaseHelper.getDownload(downloadId);
+            boolean isResume = (downloadData != null && downloadData.getAsLong("downloaded_bytes") > 0);
+
+            // Criar arquivo usando SAF
+            DocumentFile downloadFile = safDownloadManager.createDownloadFile(game, downloadLink, isResume);
+            if (downloadFile == null) {
+                throw new IOException("Não foi possível criar arquivo de download");
+            }
+            
+            Log.d(TAG, "Created download file: " + downloadFile.getName());
+            
+            // Download real usando SAF
+            realDownloadSAF(downloadFile);
+        }
+        
+        private void downloadFileLegacy() throws IOException {
+            Log.d(TAG, "Using legacy method for download: " + game.getTitle());
+            
+            // Criar arquivo de destino (método original)
+            String downloadPath = preferencesManager.getDownloadPath();
+            File gameDir = new File(downloadPath, game.getTitle().replaceAll("[^a-zA-Z0-9.-]", "_"));
+            if (!gameDir.exists()) {
+                gameDir.mkdirs();
+            }
+            
+            String fileName = downloadLink.getFileName();
+            File outputFile = new File(gameDir, fileName);
+            
+            // Download real usando arquivo local
+            realDownloadLegacy(outputFile);
+        }
+        
+        private void realDownloadSAF(DocumentFile outputFile) throws IOException {
+            String downloadUrl = downloadLink.getDownloadUrl();
+            Log.d(TAG, "Starting real SAF download from: " + downloadUrl);
+
+            // Check for existing progress
+            ContentValues downloadData = databaseHelper.getDownload(downloadId);
+            long downloadedBytes = 0;
+            if (downloadData != null) {
+                downloadedBytes = downloadData.getAsLong("downloaded_bytes");
+            }
+
+            Request.Builder requestBuilder = new Request.Builder()
+                    .url(downloadUrl)
+                    .get()
+                    .addHeader("User-Agent", "Mozilla/5.0 (Android 10; Mobile; rv:91.0) Gecko/91.0 Firefox/91.0")
+                    .addHeader("Accept", "*/*")
+                    .addHeader("Accept-Language", "en-US,en;q=0.5")
+                    .addHeader("Accept-Encoding", "gzip, deflate")
+                    .addHeader("DNT", "1")
+                    .addHeader("Connection", "keep-alive")
+                    .addHeader("Referer", "https://www.gog.com/");
+
+            if (downloadedBytes > 0) {
+                Log.d(TAG, "Resuming download from " + downloadedBytes + " bytes.");
+                requestBuilder.addHeader("Range", "bytes=" + downloadedBytes + "-");
+            }
+
+            Request request = requestBuilder.build();
+            
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful() && response.code() != 206) { // 206 Partial Content is OK
+                    throw new IOException("HTTP Error: " + response.code() + " - " + response.message());
+                }
+                
+                long totalBytes = response.body().contentLength();
+                if (totalBytes <= 0) {
+                    totalBytes = downloadLink.getSize();
+                } else {
+                    totalBytes += downloadedBytes; // Add the already downloaded bytes to the total
+                }
+                
+                Log.d(TAG, "Content-Length: " + totalBytes + " bytes");
+                
+                try (InputStream inputStream = response.body().byteStream();
+                     OutputStream outputStream = safDownloadManager.getOutputStream(outputFile, downloadedBytes > 0)) {
+                    
+                    byte[] buffer = new byte[65536]; // 64KB buffer para melhor performance
+                    int bytesRead;
+                    
+                    long lastProgressUpdate = System.currentTimeMillis();
+                    speedMeter.reset(); // Reset do medidor
+                    
+                    while ((bytesRead = inputStream.read(buffer)) != -1 && !cancelled && !paused) {
+                        outputStream.write(buffer, 0, bytesRead);
+                        downloadedBytes += bytesRead;
+                        
+                        // Atualizar progresso e velocidade
+                        long currentTime = System.currentTimeMillis();
+                        if (currentTime - lastProgressUpdate > 1000) { // Update every second
+                            double speed = speedMeter.updateSpeed(downloadedBytes);
+                            long eta = speedMeter.calculateETA(downloadedBytes, totalBytes);
+                            onDownloadProgress(game, downloadedBytes, totalBytes, 0, 0, speed, eta);
+                            databaseHelper.updateDownloadProgress(downloadId, downloadedBytes, totalBytes, speed, eta);
+                            lastProgressUpdate = currentTime;
+                        }
+                    }
+
+                    if (paused) {
+                        // Don't delete the file on pause
+                        return;
+                    }
+                    
+                    if (cancelled) {
+                        outputFile.delete();
+                        return;
+                    }
+                    
+                    // Flush final
+                    outputStream.flush();
+
+                    // Progresso final
+                    onDownloadProgress(game, downloadedBytes, totalBytes);
+                    
+                    // Download completo
+                    String filePath = outputFile.getUri().toString();
+                    Log.d(TAG, "SAF download completed: " + filePath + " (" + downloadedBytes + " bytes)");
+                    onDownloadComplete(game, downloadId, filePath);
+                    
+                } catch (IOException e) {
+                    // Deletar arquivo em caso de erro
+                    if (outputFile.exists()) {
+                        outputFile.delete();
+                    }
+                    throw e;
+                }
+            }
+        }
+        
+        private void realDownloadLegacy(File outputFile) throws IOException {
+            String downloadUrl = downloadLink.getDownloadUrl();
+            Log.d(TAG, "Starting real legacy download from: " + downloadUrl);
+            
+            Request request = new Request.Builder()
+                    .url(downloadUrl)
+                    .get()
+                    .addHeader("User-Agent", "Mozilla/5.0 (Android 10; Mobile; rv:91.0) Gecko/91.0 Firefox/91.0")
+                    .addHeader("Accept", "*/*")
+                    .addHeader("Accept-Language", "en-US,en;q=0.5")
+                    .addHeader("Accept-Encoding", "gzip, deflate")
+                    .addHeader("DNT", "1")
+                    .addHeader("Connection", "keep-alive")
+                    .addHeader("Referer", "https://www.gog.com/")
+                    .build();
+            
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    throw new IOException("HTTP Error: " + response.code() + " - " + response.message());
+                }
+                
+                long totalBytes = response.body().contentLength();
+                if (totalBytes <= 0) {
+                    totalBytes = downloadLink.getSize();
+                }
+                
+                Log.d(TAG, "Content-Length: " + totalBytes + " bytes");
+                
+                try (InputStream inputStream = response.body().byteStream();
+                     FileOutputStream outputStream = new FileOutputStream(outputFile)) {
+                    
+                    long bytesDownloaded = 0;
+                    byte[] buffer = new byte[65536]; // 64KB buffer para melhor performance
+                    int bytesRead;
+                    
+                    long lastProgressUpdate = System.currentTimeMillis();
+                    speedMeter.reset(); // Reset do medidor
+                    
+                    while ((bytesRead = inputStream.read(buffer)) != -1 && !cancelled) {
+                        outputStream.write(buffer, 0, bytesRead);
+                        bytesDownloaded += bytesRead;
+                        
+                        // Atualizar progresso e velocidade
+                        long currentTime = System.currentTimeMillis();
+                        if (currentTime - lastProgressUpdate > 250) {
+                            double speed = speedMeter.updateSpeed(bytesDownloaded);
+                            long eta = speedMeter.calculateETA(bytesDownloaded, totalBytes);
+                            onDownloadProgress(game, bytesDownloaded, totalBytes, 0, 0, speed, eta);
+                            lastProgressUpdate = currentTime;
+                        }
+                        
+                        // Verificar se foi cancelado
+                        if (cancelled) {
+                            outputFile.delete();
+                            return;
+                        }
+                    }
+                    
+                    // Flush final
+                    outputStream.flush();
+                    
+                    if (cancelled) {
+                        outputFile.delete();
+                        return;
+                    }
+                    
+                    // Progresso final
+                    onDownloadProgress(game, bytesDownloaded, bytesDownloaded);
+                    
+                    // Download completo
+                    Log.d(TAG, "Legacy download completed: " + outputFile.getAbsolutePath() + " (" + bytesDownloaded + " bytes)");
+                    onDownloadComplete(game, downloadId, outputFile.getAbsolutePath());
+                    
+                } catch (IOException e) {
+                    // Deletar arquivo em caso de erro
+                    if (outputFile.exists()) {
+                        outputFile.delete();
+                    }
+                    throw e;
+                }
+            }
+        }
+    }
+    
+    // Classe interna para gerenciar download de múltiplos arquivos
+    private class BatchDownloadTask implements Runnable {
+        private Game game;
+        private List<DownloadLink> downloadLinks;
+        private volatile boolean cancelled = false;
+        private int currentFileIndex = 0;
+        private SpeedMeter speedMeter = new SpeedMeter();
+        
+        public BatchDownloadTask(Game game, List<DownloadLink> downloadLinks) {
+            this.game = game;
+            this.downloadLinks = new ArrayList<>(downloadLinks);
+        }
+        
+        public void cancel() {
+            cancelled = true;
+        }
+        
+        @Override
+        public void run() {
+            try {
+                downloadFiles();
+            } catch (Exception e) {
+                if (!cancelled) {
+                    Log.e(TAG, "Batch download error", e);
+                    onDownloadError(game, "Erro no download em lote: " + e.getMessage());
+                }
+            }
+        }
+        
+        private void downloadFiles() {
+            Log.d(TAG, "Starting batch download of " + downloadLinks.size() + " files for: " + game.getTitle());
+            
+            long totalBytesAllFiles = 0;
+            for (DownloadLink link : downloadLinks) {
+                totalBytesAllFiles += link.getSize();
+            }
+            
+            long totalBytesDownloaded = 0;
+            
+            for (int i = 0; i < downloadLinks.size() && !cancelled; i++) {
+                currentFileIndex = i;
+                DownloadLink currentLink = downloadLinks.get(i);
+                
+                Log.d(TAG, "Downloading file " + (i + 1) + "/" + downloadLinks.size() + ": " + currentLink.getName());
+                
+                try {
+                    // Obter URL de download real
+                    String[] downloadUrl = new String[1];
+                    String[] errorMessage = new String[1];
+                    
+                    Object lock = new Object();
+                    boolean[] completed = new boolean[1];
+                    
+                    libraryManager.getDownloadLink(game.getId(), currentLink, "installer",
+                            new GOGLibraryManager.DownloadLinkCallback() {
+                        @Override
+                        public void onSuccess(String url) {
+                            downloadUrl[0] = url;
+                            synchronized (lock) {
+                                completed[0] = true;
+                                lock.notify();
+                            }
+                        }
+                        
+                        @Override
+                        public void onError(String error) {
+                            errorMessage[0] = error;
+                            synchronized (lock) {
+                                completed[0] = true;
+                                lock.notify();
+                            }
+                        }
+                    });
+                    
+                    // Aguardar resposta da API
+                    synchronized (lock) {
+                        while (!completed[0] && !cancelled) {
+                            try {
+                                lock.wait(1000); // Timeout de 1 segundo
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                return;
+                            }
+                        }
+                    }
+                    
+                    if (cancelled) return;
+                    
+                    if (errorMessage[0] != null) {
+                        throw new IOException("Erro ao obter URL de download: " + errorMessage[0]);
+                    }
+                    
+                    if (downloadUrl[0] == null || downloadUrl[0].isEmpty()) {
+                        throw new IOException("URL de download inválida para: " + currentLink.getName());
+                    }
+                    
+                    currentLink.setDownloadUrl(downloadUrl[0]);
+                    
+                    // Fazer download do arquivo
+                    long fileBytesDownloaded = downloadFile(currentLink, totalBytesDownloaded, totalBytesAllFiles);
+                    totalBytesDownloaded += fileBytesDownloaded;
+                    
+                } catch (Exception e) {
+                    Log.e(TAG, "Error downloading file: " + currentLink.getName(), e);
+                    // Continuar com o próximo arquivo em caso de erro
+                    onDownloadProgress(game, totalBytesDownloaded, totalBytesAllFiles, 
+                                     currentFileIndex, downloadLinks.size(), 0, 0);
+                }
+            }
+            
+            if (!cancelled) {
+                // Todos os downloads concluídos
+                Log.d(TAG, "Batch download completed for: " + game.getTitle());
+                
+                // Atualizar batch no banco
+                ContentValues batch = databaseHelper.getDownloadBatch(game.getId());
+                if (batch != null) {
+                    long batchId = batch.getAsLong("id");
+                    databaseHelper.updateBatchProgress(batchId, downloadLinks.size(), "COMPLETED");
+                }
+                
+                onDownloadComplete(game, -1, "Batch download completed");
+            }
+        }
+        
+        private long downloadFile(DownloadLink downloadLink, long totalBytesDownloadedSoFar, long totalBytesAllFiles) throws IOException {
+            String downloadUrl = downloadLink.getDownloadUrl();
+            Log.d(TAG, "Starting download from: " + downloadUrl);
+            
+            DocumentFile outputFile = null;
+            
+            // Criar arquivo usando SAF
+            if (safDownloadManager.hasDownloadLocationConfigured()) {
+                outputFile = safDownloadManager.createDownloadFile(game, downloadLink, false);
+                if (outputFile == null) {
+                    throw new IOException("Não foi possível criar arquivo de download");
+                }
+            } else {
+                throw new IOException("Pasta de download não configurada");
+            }
+            
+            Request request = new Request.Builder()
+                    .url(downloadUrl)
+                    .get()
+                    .addHeader("User-Agent", "Mozilla/5.0 (Android 10; Mobile; rv:91.0) Gecko/91.0 Firefox/91.0")
+                    .addHeader("Accept", "*/*")
+                    .addHeader("Accept-Language", "en-US,en;q=0.5")
+                    .addHeader("Accept-Encoding", "gzip, deflate")
+                    .addHeader("DNT", "1")
+                    .addHeader("Connection", "keep-alive")
+                    .addHeader("Referer", "https://www.gog.com/")
+                    .build();
+            
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    throw new IOException("HTTP Error: " + response.code() + " - " + response.message());
+                }
+                
+                long fileSize = response.body().contentLength();
+                if (fileSize <= 0) {
+                    fileSize = downloadLink.getSize();
+                }
+                
+                try (InputStream inputStream = response.body().byteStream();
+                     OutputStream outputStream = safDownloadManager.getOutputStream(outputFile, false)) {
+                    
+                    long fileBytesDownloaded = 0;
+                    byte[] buffer = new byte[65536]; // 64KB buffer para melhor performance
+                    int bytesRead;
+                    
+                    long lastProgressUpdate = System.currentTimeMillis();
+                    speedMeter.reset(); // Reset do medidor para este arquivo
+                    
+                    while ((bytesRead = inputStream.read(buffer)) != -1 && !cancelled) {
+                        outputStream.write(buffer, 0, bytesRead);
+                        fileBytesDownloaded += bytesRead;
+                        
+                        long currentTime = System.currentTimeMillis();
+                        
+                        // Atualizar progresso e velocidade usando SpeedMeter
+                        if (currentTime - lastProgressUpdate > 250) {
+                            double speed = speedMeter.updateSpeed(fileBytesDownloaded);
+                            long eta = speedMeter.calculateETA(fileBytesDownloaded, fileSize);
+                            long totalDownloadedIncludingThis = totalBytesDownloadedSoFar + fileBytesDownloaded;
+                            onDownloadProgress(game, totalDownloadedIncludingThis, totalBytesAllFiles, 
+                                             currentFileIndex, downloadLinks.size(), speed, eta);
+                            lastProgressUpdate = currentTime;
+                        }
+                    }
+                    
+                    if (cancelled) {
+                        outputFile.delete();
+                        return 0;
+                    }
+                    
+                    // Flush final
+                    outputStream.flush();
+                    
+                    Log.d(TAG, "File download completed: " + downloadLink.getName() + " (" + fileBytesDownloaded + " bytes)");
+                    return fileBytesDownloaded;
+                    
+                } catch (IOException e) {
+                    if (outputFile.exists()) {
+                        outputFile.delete();
+                    }
+                    throw e;
+                }
+            }
+        }
+    }
+}

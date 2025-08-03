@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+  <!-- Theme for Android 12+ with programmatic Dynamic Color support -->
+  <style name="Theme.GOGDownloader" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- Base Material You theme - Dynamic Color applied programmatically -->
+    
+    <!-- Base colors - will be replaced by Dynamic Color when available -->
+    <item name="colorPrimary">@color/material_primary</item>
+    <item name="colorPrimaryVariant">@color/material_primary_dark</item>
+    <item name="colorOnPrimary">@android:color/white</item>
+    
+    <item name="colorSecondary">@color/material_secondary</item>
+    <item name="colorSecondaryVariant">@color/material_secondary_dark</item>
+    <item name="colorOnSecondary">@android:color/white</item>
+    
+    <item name="android:colorBackground">@color/material_background</item>
+    <item name="colorSurface">@color/material_surface</item>
+    <item name="colorOnSurface">@android:color/black</item>
+    
+    <!-- Status bar and navigation bar styling -->
+    <item name="android:statusBarColor">@android:color/transparent</item>
+    <item name="android:navigationBarColor">@android:color/transparent</item>
+    <item name="android:windowLightStatusBar">true</item>
+    <item name="android:windowLightNavigationBar">true</item>
+    
+    <!-- Enable edge-to-edge experience -->
+    <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    <item name="android:enforceStatusBarContrast">false</item>
+    <item name="android:enforceNavigationBarContrast">false</item>
+    
+    <!-- Enhanced Android 12+ features -->
+    <item name="android:windowSplashScreenBackground">?attr/colorSurface</item>
+    <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+
+    <!-- Material You Dialogs -->
+    <item name="materialAlertDialogTheme">@style/ThemeOverlay.Material3.MaterialAlertDialog</item>
+    <item name="alertDialogTheme">@style/ThemeOverlay.Material3.MaterialAlertDialog</item>
+  </style>
+</resources>

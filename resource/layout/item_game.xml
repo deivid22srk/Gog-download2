@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    app:cardElevation="2dp"
+    app:cardCornerRadius="8dp"
+    android:foreground="?android:attr/selectableItemBackground">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <!-- Game Cover Image -->
+        <ImageView
+            android:id="@+id/gameCoverImage"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginEnd="12dp"
+            android:scaleType="centerCrop"
+            android:background="@drawable/image_border"
+            android:padding="1dp"
+            android:contentDescription="Game Cover" />
+
+        <!-- Game Info -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_gravity="center_vertical">
+
+            <!-- Game Title -->
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/gameTitleText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Game Title"
+                android:textAppearance="?attr/textAppearanceTitleSmall"
+                android:textStyle="bold"
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <!-- Game Info Row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/gameDeveloperText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Developer"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/gameSizeText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 MB"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+            </LinearLayout>
+
+            <!-- Genres -->
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/gameGenresText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Action, Adventure"
+                android:textAppearance="?attr/textAppearanceCaption"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <!-- Download Progress -->
+            <LinearLayout
+                android:id="@+id/downloadProgressLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <ProgressBar
+                    android:id="@+id/downloadProgressBar"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="4dp"
+                    android:progressTint="?attr/colorSecondary"
+                    android:progressBackgroundTint="?attr/colorPrimaryContainer"
+                    android:max="100"
+                    android:progress="0" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/downloadProgressText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Baixando... 50%"
+                    android:textAppearance="?attr/textAppearanceCaption"
+                    android:textColor="?attr/colorPrimary" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Action Button -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/actionButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/download"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:minWidth="80dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/cancelButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/cancel"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:visibility="gone"
+                android:minWidth="80dp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>
