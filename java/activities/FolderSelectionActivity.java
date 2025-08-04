@@ -113,18 +113,63 @@ public class FolderSelectionActivity extends BaseActivity {
     }
 
     private void checkAndRequestPermissions() {
-        if (!hasStoragePermission()) {
-            requestStoragePermission();
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission()) {
-            requestNotificationPermission();
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !hasOverlayPermission()) {
-            requestOverlayPermission();
-        } else {
-            // All permissions granted, update button state
-            checkContinueButtonState();
+        // Sequentially check for permissions.
+
+        // 1. Standard Permissions (can be grouped)
+        java.util.List<String> standardPermsNeeded = new java.util.ArrayList<>();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                standardPermsNeeded.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            }
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                standardPermsNeeded.add(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        }
+
+        if (!standardPermsNeeded.isEmpty()) {
+            Log.d("FolderSelectionActivity", "Requesting standard permissions...");
+            permissionHelper.requestPermissions(standardPermsNeeded.toArray(new String[0]), granted -> {
+                // After the user responds, re-check the whole chain.
+                checkAndRequestPermissions();
+            });
+            return; // Stop here and wait for the callback.
+        }
+
+        // 2. Special Permission: All Files Access (Android 11+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                Log.d("FolderSelectionActivity", "Requesting All Files Access...");
+                try {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                    storagePermissionLauncher.launch(intent);
+                } catch (Exception e) {
+                    Log.e("FolderSelectionActivity", "Failed to launch storage settings", e);
+                    Toast.makeText(this, "Falha ao abrir configurações de armazenamento.", Toast.LENGTH_SHORT).show();
+                }
+                return; // Stop here and wait for the user to return from settings.
+            }
+        }
+
+        // 3. Special Permission: Draw Over Other Apps
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(this)) {
+                Log.d("FolderSelectionActivity", "Requesting Overlay permission...");
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                overlayPermissionLauncher.launch(intent);
+                return; // Stop here and wait.
+            }
+        }
+
+        // If we reach here, all permissions have been granted.
+        Log.d("FolderSelectionActivity", "All permissions granted.");
+        checkContinueButtonState();
     }
 
+    // Helper methods to check permissions state for the continue button
     private boolean hasStoragePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             return Environment.isExternalStorageManager();
@@ -145,39 +190,6 @@ public class FolderSelectionActivity extends BaseActivity {
             return Settings.canDrawOverlays(this);
         }
         return true;
-    }
-
-    private void requestStoragePermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:" + getPackageName()));
-                storagePermissionLauncher.launch(intent);
-            } catch (Exception e) {
-                Log.e("FolderSelectionActivity", "Failed to launch storage settings", e);
-                Toast.makeText(this, "Falha ao abrir configurações de armazenamento.", Toast.LENGTH_SHORT).show();
-            }
-        } else {
-            permissionHelper.requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, granted -> {
-                checkAndRequestPermissions(); // Continue the chain
-            });
-        }
-    }
-
-    private void requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissionHelper.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, granted -> {
-                checkAndRequestPermissions(); // Continue the chain
-            });
-        }
-    }
-
-    private void requestOverlayPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + getPackageName()));
-            overlayPermissionLauncher.launch(intent);
-        }
     }
 
     private void openFolderPicker(ActivityResultLauncher<Intent> launcher) {
