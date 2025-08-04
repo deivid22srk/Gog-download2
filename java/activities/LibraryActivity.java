@@ -544,86 +544,56 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
             .show();
     }
 
-    private void checkAndInstallInnoextract(String sourceDir, String destDir) {
-        // Primeiro verificar se innoextract já está instalado
-        executeTermuxCommand("command -v innoextract", new TermuxCommandCallback() {
-            @Override
-            public void onSuccess() {
-                // innoextract já está instalado, proceder com instalação do jogo
-                Toast.makeText(LibraryActivity.this, "✅ innoextract encontrado! Iniciando instalação...", Toast.LENGTH_SHORT).show();
-                installGameWithInnoextract(sourceDir, destDir);
-            }
-            
-            @Override
-            public void onError() {
-                // innoextract não encontrado, instalar primeiro
-                Toast.makeText(LibraryActivity.this, "📦 Instalando innoextract...", Toast.LENGTH_SHORT).show();
-                installInnoextract(sourceDir, destDir);
-            }
-        });
-    }
-    
-    private void installInnoextract(String sourceDir, String destDir) {
-        // Tentar instalar innoextract via pkg
-        executeTermuxCommand("pkg update -y && pkg install -y innoextract", new TermuxCommandCallback() {
-            @Override
-            public void onSuccess() {
-                Toast.makeText(LibraryActivity.this, "✅ innoextract instalado! Iniciando instalação...", Toast.LENGTH_SHORT).show();
-                installGameWithInnoextract(sourceDir, destDir);
-            }
-            
-            @Override
-            public void onError() {
-                // Falha na instalação, mostrar opções para o usuário
-                showInnoextractInstallationError(sourceDir, destDir);
-            }
-        });
-    }
-    
     private void installGameWithInnoextract(String sourceDir, String destDir) {
-        // Criar comando para instalar o jogo
         String gameInstallScript = createGameInstallScript(sourceDir, destDir);
-        
-        // Salvar script no diretório home do Termux
         String termuxScriptPath = saveScriptToTermuxHome(gameInstallScript);
         if (termuxScriptPath != null) {
-            executeTermuxCommand("bash " + termuxScriptPath, new TermuxCommandCallback() {
-                @Override
-                public void onSuccess() {
-                    Toast.makeText(LibraryActivity.this, "🎉 Instalação concluída com sucesso!", Toast.LENGTH_LONG).show();
-                }
-                
-                @Override
-                public void onError() {
-                    Toast.makeText(LibraryActivity.this, "❌ Erro durante a instalação do jogo.", Toast.LENGTH_LONG).show();
-                }
-            });
+            executeTermuxCommand("bash " + termuxScriptPath);
         }
     }
     
     private String createGameInstallScript(String sourceDir, String destDir) {
         return "#!/data/data/com.termux/files/usr/bin/bash\n" +
                 "echo \"🎮 Iniciando instalação do jogo...\"\n" +
+                "echo \"Script executado em: $(date)\"\n" +
+                "echo \"\"\n" +
+                "echo \"🔄 Verificando dependências (innoextract)...\"\n" +
+                "if ! command -v innoextract &>/dev/null; then\n" +
+                "    echo \"📦 innoextract não encontrado. Tentando instalar via pkg...\"\n" +
+                "    pkg update -y && pkg install -y innoextract\n" +
+                "    if ! command -v innoextract &>/dev/null; then\n" +
+                "        echo \"\"\n" +
+                "        echo \"❌ Falha ao instalar o innoextract. Abortando.\"\n" +
+                "        echo \"💡 Tente instalar manualmente: execute 'pkg install innoextract' no Termux.\"\n" +
+                "        read -p \"Pressione Enter para sair...\"\"\n" +
+                "        exit 1\n" +
+                "    fi\n" +
+                "fi\n" +
+                "echo \"✅ innoextract está pronto.\"\n" +
                 "\n" +
                 "GOG_DIR=\"" + sourceDir + "\"\n" +
                 "DEST_DIR=\"" + destDir + "\"\n" +
                 "\n" +
                 "# Verificar pasta de origem\n" +
                 "if [ ! -d \"$GOG_DIR\" ]; then\n" +
-                "    echo \"❌ Erro: pasta de origem $GOG_DIR não encontrada.\"\n" +
+                "    echo \"❌ Erro: pasta de origem '$GOG_DIR' não encontrada.\"\n" +
+                "    read -p \"Pressione Enter para sair...\"\"\n" +
                 "    exit 1\n" +
                 "fi\n" +
                 "\n" +
-                "cd \"$GOG_DIR\" || { echo \"❌ Erro: não foi possível acessar $GOG_DIR.\"; exit 1; }\n" +
+                "cd \"$GOG_DIR\" || { echo \"❌ Erro: não foi possível acessar '$GOG_DIR'.\"; read -p \"Pressione Enter para sair...\"; exit 1; }\n" +
                 "\n" +
                 "# Procurar arquivo setup\n" +
+                "echo \"🔍 Procurando instalador .exe em '$GOG_DIR'...\"\n" +
                 "SETUP_EXE=$(ls setup_*.exe 2>/dev/null | head -n 1)\n" +
                 "if [ ! -f \"$SETUP_EXE\" ]; then\n" +
-                "    echo \"❌ Erro: Instalador .exe não encontrado na pasta.\"\n" +
+                "    echo \"❌ Erro: Nenhum instalador 'setup_*.exe' encontrado na pasta.\"\n" +
                 "    echo \"📁 Arquivos na pasta:\"\n" +
                 "    ls -la\n" +
+                "    read -p \"Pressione Enter para sair...\"\"\n" +
                 "    exit 1\n" +
                 "fi\n" +
+                "echo \"✅ Instalador encontrado: $SETUP_EXE\"\n" +
                 "\n" +
                 "# Criar pasta de destino se não existir\n" +
                 "mkdir -p \"$DEST_DIR\"\n" +
@@ -635,13 +605,15 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 "    echo \"🎉 Jogo instalado com sucesso!\"\n" +
                 "    echo \"📍 Local: $DEST_DIR\"\n" +
                 "    echo \"\"\n" +
-                "    echo \"📁 Estrutura da instalação:\"\n" +
+                "    echo \"📁 Arquivos extraídos:\"\n" +
                 "    ls -la \"$DEST_DIR\"\n" +
                 "else\n" +
-                "    echo \"❌ Erro durante a extração.\"\n" +
-                "    echo \"💡 Verifique se o arquivo é um instalador GOG válido.\"\n" +
+                "    echo \"❌ Ocorreu um erro durante a extração.\"\n" +
+                "    echo \"💡 Verifique se o arquivo é um instalador GOG válido e se há espaço suficiente.\"\n" +
+                "    read -p \"Pressione Enter para sair...\"\"\n" +
                 "    exit 1\n" +
-                "fi\n";
+                "fi\n" +
+                "read -p \"Pressione Enter para fechar esta janela...\"\"\n";
     }
     
     private String saveScriptToTermuxHome(String scriptContent) {
@@ -674,112 +646,33 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         }
     }
     
-    private void executeTermuxCommand(String command, TermuxCommandCallback callback) {
+    private void executeTermuxCommand(String command) {
         if (!checkTermuxInstallation()) {
-            callback.onError();
             return;
         }
-        
+
         String bashPath = getTermuxBashPath();
         if (bashPath == null) {
             showTermuxTroubleshootingDialog();
-            callback.onError();
             return;
         }
-        
+
         Intent intent = new Intent();
-        intent.setClassName("com.termux", "com.termux.app.RunCommandService");
+        intent.setClassName("com.termux", "com.termux.app.TermuxActivity");
         intent.setAction("com.termux.RUN_COMMAND");
         intent.putExtra("com.termux.RUN_COMMAND_PATH", bashPath);
         intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", command});
         intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", getTermuxHomeDir());
         intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
-        
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
         try {
-            startService(intent);
-            Log.d("LibraryActivity", "Executed Termux command: " + command);
-            
-            // Para comandos de verificação, usar timeout menor
-            int timeout = command.contains("command -v") ? 3000 : 10000;
-            
-            new android.os.Handler().postDelayed(() -> {
-                // Verificar se o comando foi bem-sucedido baseado no tipo
-                if (command.contains("command -v innoextract")) {
-                    // Verificar se innoextract realmente existe
-                    File innoextractFile = new File("/data/data/com.termux/files/usr/bin/innoextract");
-                    if (innoextractFile.exists()) {
-                        callback.onSuccess();
-                    } else {
-                        callback.onError();
-                    }
-                } else if (command.contains("pkg install")) {
-                    // Verificar novamente se innoextract foi instalado
-                    File innoextractFile = new File("/data/data/com.termux/files/usr/bin/innoextract");
-                    if (innoextractFile.exists()) {
-                        callback.onSuccess();
-                    } else {
-                        callback.onError();
-                    }
-                } else {
-                    // Para outros comandos, assumir sucesso
-                    callback.onSuccess();
-                }
-            }, timeout);
-            
+            startActivity(intent);
+            Log.d("LibraryActivity", "Launched Termux activity with command: " + command);
         } catch (Exception e) {
-            Log.e("LibraryActivity", "Failed to execute Termux command", e);
-            callback.onError();
+            Log.e("LibraryActivity", "Failed to launch Termux activity", e);
+            Toast.makeText(this, "Erro ao iniciar o Termux: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
-    }
-    
-    private void showInnoextractInstallationError(String sourceDir, String destDir) {
-        new MaterialAlertDialogBuilder(this)
-            .setTitle("❌ Erro na Instalação do innoextract")
-            .setMessage("🚨 **Não foi possível instalar o innoextract automaticamente**\n\n" +
-                    "💡 **Soluções:**\n" +
-                    "1. ✅ Abra o Termux manualmente\n" +
-                    "2. 🔄 Execute: `pkg update && pkg install innoextract`\n" +
-                    "3. 🎮 Tente a instalação novamente\n\n" +
-                    "📱 **Instalação Manual:**\n" +
-                    "• Abra o Termux\n" +
-                    "• Digite: pkg install innoextract\n" +
-                    "• Pressione Enter e aguarde")
-            .setPositiveButton("🚀 Abrir Termux", (dialog, which) -> {
-                try {
-                    Intent intent = getPackageManager().getLaunchIntentForPackage("com.termux");
-                    if (intent != null) {
-                        startActivity(intent);
-                        Toast.makeText(this, "💡 Execute: pkg install innoextract", Toast.LENGTH_LONG).show();
-                    }
-                } catch (Exception e) {
-                    Toast.makeText(this, "Erro ao abrir Termux", Toast.LENGTH_SHORT).show();
-                }
-            })
-            .setNeutralButton("🔄 Tentar Novamente", (dialog, which) -> {
-                checkAndInstallInnoextract(sourceDir, destDir);
-            })
-            .setNegativeButton("Cancelar", null)
-            .show();
-    }
-    
-    // Método para testar manualmente se innoextract existe
-    private void testInnoextractAvailability() {
-        executeTermuxCommand("command -v innoextract && echo 'innoextract encontrado!' || echo 'innoextract não encontrado'", new TermuxCommandCallback() {
-            @Override
-            public void onSuccess() {
-                Toast.makeText(LibraryActivity.this, "✅ innoextract está disponível!", Toast.LENGTH_SHORT).show();
-            }
-            
-            @Override
-            public void onError() {
-                Toast.makeText(LibraryActivity.this, "❌ innoextract não encontrado", Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-    
-    interface TermuxCommandCallback {
-        void onSuccess();
-        void onError();
     }
     
     private void checkPermissions() {
@@ -1478,8 +1371,8 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                     }
                 }
                 if (!sourceFiles.isEmpty()) {
-                    // Verificar e instalar innoextract, depois instalar o jogo
-                    checkAndInstallInnoextract(sourceFolderPath, destinationFolderPath);
+                    // Inicia a instalação do jogo usando o Termux
+                    installGameWithInnoextract(sourceFolderPath, destinationFolderPath);
                 } else {
                     Toast.makeText(this, "Nenhum arquivo .exe encontrado na pasta de origem.", Toast.LENGTH_SHORT).show();
                 }
