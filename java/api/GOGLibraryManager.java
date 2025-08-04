@@ -67,7 +67,7 @@ public class GOGLibraryManager {
     }
     
     private void executeRequestWithRefresh(Request request, Callback originalCallback) {
-        executeRequestWithRefresh(request, new Callback() {
+        httpClient.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
                 originalCallback.onFailure(call, e);
