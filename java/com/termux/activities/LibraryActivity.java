@@ -49,6 +49,7 @@ import com.termux.utils.ImageLoader;
 import com.termux.utils.PermissionHelper;
 import com.termux.utils.PreferencesManager;
 import com.termux.utils.SAFDownloadManager;
+import com.termux.dialogs.FolderPickerDialogFragment;
 import com.termux.services.InstallationService;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.textfield.TextInputEditText;
@@ -92,7 +93,6 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     private BroadcastReceiver downloadProgressReceiver;
     private BroadcastReceiver installProgressReceiver;
 
-    private ActivityResultLauncher<Intent> installerFolderPickerLauncher;
     private ActivityResultLauncher<Intent> overlayPermissionLauncher;
     
     @Override
@@ -998,37 +998,24 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         }).start();
     }
     
-    private void setupInstallFolderPickerLauncher() {
-        installerFolderPickerLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                        Uri sourceUri = result.getData().getData();
-                        if (sourceUri != null) {
-                            SAFDownloadManager safManager = new SAFDownloadManager(this);
-                            String sourcePath = safManager.getRealPathFromURI(sourceUri);
-
-                            String destinationUriString = preferencesManager.getInstallUri();
-                            if (destinationUriString != null) {
-                                Uri destinationUri = Uri.parse(destinationUriString);
-                                String destinationPath = safManager.getRealPathFromURI(destinationUri);
-
-                                if (sourcePath != null && destinationPath != null) {
-                                    launchTermuxWithPaths(sourcePath, destinationPath);
-                                } else {
-                                    Toast.makeText(this, "Não foi possível obter os caminhos reais das pastas.", Toast.LENGTH_SHORT).show();
-                                }
-                            } else {
-                                Toast.makeText(this, "Pasta de instalação não configurada.", Toast.LENGTH_SHORT).show();
-                            }
-                        }
-                    }
-                });
-    }
-
     private void openInstallerFolderPicker() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        installerFolderPickerLauncher.launch(intent);
+        FolderPickerDialogFragment dialog = new FolderPickerDialogFragment();
+        dialog.setFolderPickerListener(path -> {
+            String destinationUriString = preferencesManager.getInstallUri();
+            if (destinationUriString != null) {
+                Uri destinationUri = Uri.parse(destinationUriString);
+                SAFDownloadManager safManager = new SAFDownloadManager(this);
+                String destinationPath = safManager.getRealPathFromURI(destinationUri);
+                if (destinationPath != null) {
+                    launchTermuxWithPaths(path, destinationPath);
+                } else {
+                    Toast.makeText(this, "Não foi possível obter o caminho real da pasta de instalação.", Toast.LENGTH_SHORT).show();
+                }
+            } else {
+                Toast.makeText(this, "Pasta de instalação não configurada.", Toast.LENGTH_SHORT).show();
+            }
+        });
+        dialog.show(getSupportFragmentManager(), "FolderPickerDialogFragment");
     }
 
     private void showInstallProgressDialog() {
