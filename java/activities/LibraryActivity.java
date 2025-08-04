@@ -291,82 +291,6 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         });
     }
 
-    private void launchTermuxForInstallation() {
-        if (!checkTermuxInstallation()) {
-            return;
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + getPackageName()));
-            overlayPermissionLauncher.launch(intent);
-            return;
-        }
-
-        if (!ensureTermuxIsReady()) {
-            return;
-        }
-
-        String bashPath = getTermuxBashPath();
-        if (bashPath == null) {
-            Toast.makeText(this, "Erro: Não foi possível encontrar o bash do Termux.", Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        Intent intent = new Intent();
-        intent.setClassName("com.termux", "com.termux.app.RunCommandService");
-        intent.setAction("com.termux.RUN_COMMAND");
-        intent.putExtra("com.termux.RUN_COMMAND_PATH", bashPath);
-        intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", "termux-setup-storage"});
-        intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", getTermuxHomeDir());
-        intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
-        
-        try {
-            startService(intent);
-            Toast.makeText(this, "Iniciando configuração do Termux...", Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {
-            Log.e("LibraryActivity", "Failed to start Termux service", e);
-            Toast.makeText(this, "Erro ao iniciar o Termux: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private boolean ensureTermuxIsReady() {
-        try {
-            String termuxHomeDir = getTermuxHomeDir();
-            File termuxConfigDir = new File(termuxHomeDir, ".termux");
-            if (!termuxConfigDir.exists()) {
-                if (!termuxConfigDir.mkdirs()) {
-                    Log.e("LibraryActivity", "Failed to create .termux directory");
-                    Toast.makeText(this, "Erro: Não foi possível criar diretório de configuração do Termux.", Toast.LENGTH_LONG).show();
-                    return false;
-                }
-            }
-            
-            File propertiesFile = new File(termuxConfigDir, "termux.properties");
-            if (!propertiesFile.exists()) {
-                try (FileWriter writer = new FileWriter(propertiesFile)) {
-                    writer.write("allow-external-apps=true\n");
-                    writer.write("bell-character=ignore\n");
-                    writer.write("enforce-char-based-input=true\n");
-                }
-            } else {
-                // Verificar se allow-external-apps está configurado
-                // Se não estiver, adicionar
-                String content = readFileContent(propertiesFile);
-                if (!content.contains("allow-external-apps=true")) {
-                    try (FileWriter writer = new FileWriter(propertiesFile, true)) {
-                        writer.write("\nallow-external-apps=true\n");
-                    }
-                }
-            }
-            return true;
-        } catch (IOException e) {
-            Log.e("LibraryActivity", "Failed to configure Termux", e);
-            Toast.makeText(this, "Erro ao configurar Termux: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            return false;
-        }
-    }
-
     private boolean checkTermuxInstallation() {
         try {
             PackageInfo packageInfo = getPackageManager().getPackageInfo("com.termux", 0);
@@ -654,7 +578,9 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         intent.setAction("com.termux.RUN_COMMAND");
         intent.putExtra("com.termux.RUN_COMMAND_PATH", bashPath);
         intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", command});
-        intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", getTermuxHomeDir());
+        File externalDir = getExternalFilesDir(null);
+        String workDir = externalDir != null ? externalDir.getAbsolutePath() : "/sdcard";
+        intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", workDir);
         intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
