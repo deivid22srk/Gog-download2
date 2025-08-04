@@ -260,7 +260,28 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     private void setupClickListeners() {
         refreshButton.setOnClickListener(v -> refreshLibrary());
         retryButton.setOnClickListener(v -> loadLibrary());
-        installFab.setOnClickListener(v -> showFolderPickerForSource());
+        installFab.setOnClickListener(v -> {
+            android.content.SharedPreferences prefs = getSharedPreferences("TermuxPrefs", MODE_PRIVATE);
+            boolean isFirstRun = prefs.getBoolean("isFirstFabClick", true);
+
+            if (isFirstRun) {
+                // First click: launch Termux and set flag
+                prefs.edit().putBoolean("isFirstFabClick", false).apply();
+
+                Toast.makeText(this, "Iniciando o Termux para configuração inicial. Por favor, aguarde e retorne ao app.", Toast.LENGTH_LONG).show();
+                Intent intent = new Intent();
+                intent.setComponent(new ComponentName("com.termux", "com.termux.app.TermuxActivity"));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                try {
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Toast.makeText(this, "Não foi possível abrir o Termux. Verifique se está instalado.", Toast.LENGTH_SHORT).show();
+                }
+            } else {
+                // Subsequent clicks: run normal installation flow
+                showFolderPickerForSource();
+            }
+        });
 
         overlayPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
