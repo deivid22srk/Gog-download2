@@ -67,9 +67,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGameActionListener {
+public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGameActionListener, FolderPickerDialogFragment.FolderPickerListener {
     
     private static final int SETTINGS_REQUEST_CODE = 100;
+    private String sourceFolderPath;
+    private String destinationFolderPath;
     
     private RecyclerView gamesRecyclerView;
     private GamesAdapter gamesAdapter;
@@ -176,71 +178,6 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 });
     }
 
-    private void setupInstallFolderPickerLauncher() {
-        installerFolderPickerLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                        Uri uri = result.getData().getData();
-                        if (uri != null) {
-                            preferencesManager.setInstallUri(uri.toString());
-                            Toast.makeText(this, "Pasta de instalação selecionada: " + uri.toString(), Toast.LENGTH_SHORT).show();
-                            openSourceFilePicker();
-                        }
-                    }
-                });
-    }
-
-    private void openSourceFilePicker() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.setType("*/*");
-        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-        sourceFilePickerLauncher.launch(intent);
-    }
-
-    private void setupSourceFilePickerLauncher() {
-        sourceFilePickerLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                        List<Uri> uris = new ArrayList<>();
-                        if (result.getData().getClipData() != null) {
-                            for (int i = 0; i < result.getData().getClipData().getItemCount(); i++) {
-                                uris.add(result.getData().getClipData().getItemAt(i).getUri());
-                            }
-                        } else {
-                            uris.add(result.getData().getData());
-                        }
-
-                        if (!uris.isEmpty()) {
-                            File tempDir = new File(getCacheDir(), "install_temp");
-                            if (!tempDir.exists()) {
-                                tempDir.mkdirs();
-                            }
-
-                            List<String> tempFilePaths = new ArrayList<>();
-                            for (Uri uri : uris) {
-                                try {
-                                    InputStream inputStream = getContentResolver().openInputStream(uri);
-                                    File tempFile = new File(tempDir, new File(uri.getPath()).getName());
-                                    FileOutputStream outputStream = new FileOutputStream(tempFile);
-                                    byte[] buffer = new byte[1024];
-                                    int read;
-                                    while ((read = inputStream.read(buffer)) != -1) {
-                                        outputStream.write(buffer, 0, read);
-                                    }
-                                    outputStream.close();
-                                    inputStream.close();
-                                    tempFilePaths.add(tempFile.getAbsolutePath());
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                            launchTermuxWithPaths(tempFilePaths, preferencesManager.getInstallUri());
-                        }
-                    }
-                });
-    }
 
     
     private void handleSelectedFolder(android.net.Uri uri) {
@@ -322,13 +259,13 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     private void setupClickListeners() {
         refreshButton.setOnClickListener(v -> refreshLibrary());
         retryButton.setOnClickListener(v -> loadLibrary());
-        installFab.setOnClickListener(v -> openInstallerFolderPicker());
+        installFab.setOnClickListener(v -> showFolderPickerForSource());
 
         overlayPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
-                        openInstallerFolderPicker();
+                        showFolderPickerForSource();
                     } else {
                         Toast.makeText(this, "A permissão de sobreposição é necessária para a instalação.", Toast.LENGTH_SHORT).show();
                     }
@@ -412,25 +349,21 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     }
     
     private void checkPermissions() {
-        // Solicitar permissões de armazenamento apenas para compatibilidade com configurações legadas
-        // Com SAF não são obrigatórias
-        permissionHelper.requestStoragePermissions(granted -> {
-            if (!granted) {
-                Log.i("LibraryActivity", "Permissões de armazenamento negadas - usará apenas SAF");
-                // Não mostrar erro, pois SAF funciona sem essas permissões
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!android.os.Environment.isExternalStorageManager()) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                Uri uri = Uri.fromParts("package", getPackageName(), null);
+                intent.setData(uri);
+                startActivity(intent);
             }
-        });
-
-        permissionHelper.requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, new PermissionHelper.PermissionCallback() {
-            @Override
-            public void onResult(boolean granted) {
+        } else {
+            permissionHelper.requestStoragePermissions(granted -> {
                 if (!granted) {
-                    showError("A permissão de leitura de armazenamento é necessária para acessar os arquivos de instalação.");
+                    showError("A permissão de armazenamento é necessária para acessar os arquivos de instalação.");
                 }
-            }
-        });
-        
-        // Permissões de notificação são importantes para o progresso de download
+            });
+        }
+
         permissionHelper.requestNotificationPermissions(granted -> {
             if (!granted) {
                 showError(getString(R.string.permission_notification));
@@ -1085,10 +1018,45 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         }).start();
     }
     
-    private void openInstallerFolderPicker() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-        installerFolderPickerLauncher.launch(intent);
+    private void showFolderPickerForSource() {
+        FolderPickerDialogFragment dialog = FolderPickerDialogFragment.newInstance();
+        dialog.setFolderPickerListener(path -> {
+            sourceFolderPath = path;
+            showFolderPickerForDestination();
+        });
+        dialog.show(getSupportFragmentManager(), "source_folder_picker");
+    }
+
+    private void showFolderPickerForDestination() {
+        FolderPickerDialogFragment dialog = FolderPickerDialogFragment.newInstance();
+        dialog.setFolderPickerListener(path -> {
+            destinationFolderPath = path;
+            if (sourceFolderPath != null && destinationFolderPath != null) {
+                // Iniciar a instalação com os caminhos selecionados
+                // Esta é uma simplificação. A lógica real pode precisar
+                // de mais validações e talvez de uma lista de arquivos de origem.
+                List<String> sourceFiles = new ArrayList<>();
+                File sourceDir = new File(sourceFolderPath);
+                File[] files = sourceDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".bin"));
+                if (files != null) {
+                    for (File file : files) {
+                        sourceFiles.add(file.getAbsolutePath());
+                    }
+                }
+                if (!sourceFiles.isEmpty()) {
+                    launchTermuxWithPaths(sourceFiles, destinationFolderPath);
+                } else {
+                    Toast.makeText(this, "Nenhum arquivo .bin encontrado na pasta de origem.", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        dialog.show(getSupportFragmentManager(), "destination_folder_picker");
+    }
+
+    @Override
+    public void onFolderSelected(String path) {
+        // Este método pode ser usado para um callback mais genérico se necessário,
+        // mas a lógica principal está nos listeners individuais para clareza.
     }
 
     private void showInstallProgressDialog() {
