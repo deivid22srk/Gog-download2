@@ -61,6 +61,9 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.net.Uri;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import android.widget.ProgressBar;
 
 import org.json.JSONObject;
@@ -1209,7 +1212,8 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         Log.d("LibraryActivity", "Starting multiple downloads for: " + game.getTitle() + " - " + selectedLinks.size() + " files");
         
         // Criar batch de download no banco de dados
-        long batchId = databaseHelper.createDownloadBatch(game.getId(), selectedLinks.size());
+        String linksJson = DownloadLink.serializeList(new ArrayList<>(selectedLinks));
+        long batchId = databaseHelper.createDownloadBatch(game.getId(), selectedLinks.size(), linksJson);
         
         // Inserir cada download individual no banco
         for (DownloadLink link : selectedLinks) {

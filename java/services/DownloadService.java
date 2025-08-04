@@ -338,7 +338,7 @@ public class DownloadService extends Service {
         databaseHelper.updateGame(game);
 
         // Serialize links and create batch record
-        String linksJson = serializeDownloadLinks(downloadLinks);
+        String linksJson = DownloadLink.serializeList(downloadLinks);
         if (linksJson == null) {
             onDownloadError(game, "Failed to serialize download links.");
             return;
@@ -445,7 +445,7 @@ public class DownloadService extends Service {
                 return;
             }
             String linksJson = batchData.getAsString("links_json");
-            List<DownloadLink> links = deserializeDownloadLinks(linksJson);
+            List<DownloadLink> links = DownloadLink.deserializeList(linksJson);
 
             if (links != null && !links.isEmpty()) {
                 Log.d(TAG, "Resuming batch download from service startup for: " + game.getTitle());
@@ -1047,49 +1047,6 @@ public class DownloadService extends Service {
         }
     }
 
-    private String serializeDownloadLinks(List<DownloadLink> links) {
-        try {
-            JSONArray jsonArray = new JSONArray();
-            for (DownloadLink link : links) {
-                JSONObject jsonObject = new JSONObject();
-                jsonObject.put("id", link.getId());
-                jsonObject.put("name", link.getName());
-                jsonObject.put("fileName", link.getFileName());
-                jsonObject.put("url", link.getUrl());
-                jsonObject.put("size", link.getSize());
-                jsonArray.put(jsonObject);
-            }
-            return jsonArray.toString();
-        } catch (JSONException e) {
-            Log.e(TAG, "Error serializing download links", e);
-            return null;
-        }
-    }
-
-    private List<DownloadLink> deserializeDownloadLinks(String json) {
-        if (json == null || json.isEmpty()) {
-            return null;
-        }
-        try {
-            List<DownloadLink> links = new ArrayList<>();
-            JSONArray jsonArray = new JSONArray(json);
-            for (int i = 0; i < jsonArray.length(); i++) {
-                JSONObject jsonObject = jsonArray.getJSONObject(i);
-                DownloadLink link = new DownloadLink();
-                link.setId(jsonObject.optString("id"));
-                link.setName(jsonObject.optString("name"));
-                link.setFileName(jsonObject.optString("fileName"));
-                link.setUrl(jsonObject.optString("url"));
-                link.setSize(jsonObject.optLong("size"));
-                links.add(link);
-            }
-            return links;
-        } catch (JSONException e) {
-            Log.e(TAG, "Error deserializing download links", e);
-            return null;
-        }
-    }
-    
     // Classe interna para gerenciar download de múltiplos arquivos
     private class BatchDownloadTask implements Runnable {
         private Game game;
