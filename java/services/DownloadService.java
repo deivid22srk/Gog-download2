@@ -47,6 +47,9 @@ import android.content.ContentValues;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class DownloadService extends Service {
     
@@ -306,24 +309,27 @@ public class DownloadService extends Service {
     private void startBatchDownload(Game game, List<DownloadLink> downloadLinks) {
         Log.d(TAG, "Starting batch download for game: " + game.getTitle() + " with " + downloadLinks.size() + " files");
         
-        // Check if already downloading
         if (activeBatchDownloads.containsKey(game.getId())) {
             Log.w(TAG, "Game is already being downloaded: " + game.getTitle());
             return;
         }
         
-        // Update status in db
         game.setStatus(Game.DownloadStatus.DOWNLOADING);
         databaseHelper.updateGame(game);
+
+        // Serialize links and create batch record
+        String linksJson = serializeDownloadLinks(downloadLinks);
+        if (linksJson == null) {
+            onDownloadError(game, "Failed to serialize download links.");
+            return;
+        }
+        databaseHelper.createDownloadBatch(game.getId(), downloadLinks.size(), linksJson);
         
-        // Create initial notification
         showBatchDownloadNotification(game, 0, downloadLinks.size(), "Iniciando downloads...");
         
-        // Start as foreground service
         startForeground(NOTIFICATION_ID + (int) game.getId(),
                 createBatchDownloadNotification(game, 0, downloadLinks.size(), "Iniciando downloads..."));
         
-        // Create and start batch download task
         BatchDownloadTask batchTask = new BatchDownloadTask(game, downloadLinks);
         activeBatchDownloads.put(game.getId(), batchTask);
         executorService.execute(batchTask);
@@ -403,26 +409,24 @@ public class DownloadService extends Service {
     }
     
     private void resumeBatchDownload(Game game, List<ContentValues> downloads) {
+        // The 'downloads' list confirms it's a batch, but we get definitive data from the batch table.
         try {
-            List<DownloadLink> downloadLinks = new ArrayList<>();
-            
-            for (ContentValues downloadData : downloads) {
-                String linkId = downloadData.getAsString("link_id");
-                String fileName = downloadData.getAsString("file_name");
-                String downloadUrl = downloadData.getAsString("download_url");
-                
-                DownloadLink downloadLink = new DownloadLink();
-                downloadLink.setId(linkId);
-                downloadLink.setName(fileName);
-                downloadLink.setDownloadUrl(downloadUrl);
-                
-                downloadLinks.add(downloadLink);
+            ContentValues batchData = databaseHelper.getDownloadBatch(game.getId());
+            if (batchData == null) {
+                Log.e(TAG, "Cannot resume batch, no batch data found for game: " + game.getTitle());
+                onDownloadError(game, "Could not find batch data to resume.");
+                return;
             }
-            
-            Log.d(TAG, "Resuming batch download: " + game.getTitle() + " - " + downloadLinks.size() + " files");
-            
-            startBatchDownload(game, downloadLinks);
-            
+            String linksJson = batchData.getAsString("links_json");
+            List<DownloadLink> links = deserializeDownloadLinks(linksJson);
+
+            if (links != null && !links.isEmpty()) {
+                Log.d(TAG, "Resuming batch download from service startup for: " + game.getTitle());
+                startBatchDownload(game, links);
+            } else {
+                Log.e(TAG, "Failed to resume batch, could not deserialize links for game: " + game.getTitle());
+                onDownloadError(game, "Could not read batch data to resume.");
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error resuming batch download for game: " + game.getTitle(), e);
         }
@@ -434,21 +438,53 @@ public class DownloadService extends Service {
         if (task != null) {
             task.pause();
         }
+
+        BatchDownloadTask batchTask = activeBatchDownloads.get(gameId);
+        if (batchTask != null) {
+            batchTask.pause();
+        }
     }
 
     private void resumeDownload(long gameId) {
-        Log.d(TAG, "Resuming download for game ID: " + gameId);
+        Log.d(TAG, "Attempting to resume download for game ID: " + gameId);
+
+        if (activeDownloads.containsKey(gameId) || activeBatchDownloads.containsKey(gameId)) {
+            Log.w(TAG, "Resume called for an already active download: " + gameId);
+            return;
+        }
+
         Game game = databaseHelper.getGame(gameId);
-        if (game != null) {
-            // To resume, we essentially just start the download again.
-            // The service will pick up the persisted progress.
-            ContentValues downloadData = databaseHelper.getDownload(gameId);
-            if (downloadData != null) {
+        if (game == null) {
+            Log.e(TAG, "Cannot resume download, game not found for ID: " + gameId);
+            return;
+        }
+
+        // Check if it's a batch download
+        ContentValues batchData = databaseHelper.getDownloadBatch(gameId);
+        if (batchData != null) {
+            String linksJson = batchData.getAsString("links_json");
+            List<DownloadLink> links = deserializeDownloadLinks(linksJson);
+            if (links != null && !links.isEmpty()) {
+                Log.d(TAG, "Resuming batch download for: " + game.getTitle());
+                startBatchDownload(game, links);
+            } else {
+                Log.e(TAG, "Failed to resume batch download, could not deserialize links for game: " + game.getTitle());
+                onDownloadError(game, "Falha ao ler dados do batch para resumir.");
+            }
+        } else {
+            // Check for single download
+            List<ContentValues> downloads = databaseHelper.getDownloadsForGame(gameId);
+            if (downloads.size() == 1) {
+                Log.d(TAG, "Resuming single download for: " + game.getTitle());
+                ContentValues downloadData = downloads.get(0);
                 DownloadLink link = new DownloadLink();
                 link.setId(downloadData.getAsString("link_id"));
                 link.setName(downloadData.getAsString("file_name"));
                 link.setUrl(downloadData.getAsString("download_url"));
+                link.setSize(downloadData.getAsLong("total_bytes"));
                 startDownload(game, link);
+            } else {
+                Log.w(TAG, "No active single or batch download found to resume for game: " + game.getTitle());
             }
         }
     }
@@ -938,7 +974,7 @@ public class DownloadService extends Service {
                     long lastProgressUpdate = System.currentTimeMillis();
                     speedMeter.reset(); // Reset do medidor
                     
-                    while ((bytesRead = inputStream.read(buffer)) != -1 && !cancelled) {
+                    while ((bytesRead = inputStream.read(buffer)) != -1 && !cancelled && !paused) {
                         outputStream.write(buffer, 0, bytesRead);
                         bytesDownloaded += bytesRead;
                         
@@ -983,12 +1019,56 @@ public class DownloadService extends Service {
             }
         }
     }
+
+    private String serializeDownloadLinks(List<DownloadLink> links) {
+        try {
+            JSONArray jsonArray = new JSONArray();
+            for (DownloadLink link : links) {
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.put("id", link.getId());
+                jsonObject.put("name", link.getName());
+                jsonObject.put("fileName", link.getFileName());
+                jsonObject.put("url", link.getUrl());
+                jsonObject.put("size", link.getSize());
+                jsonArray.put(jsonObject);
+            }
+            return jsonArray.toString();
+        } catch (JSONException e) {
+            Log.e(TAG, "Error serializing download links", e);
+            return null;
+        }
+    }
+
+    private List<DownloadLink> deserializeDownloadLinks(String json) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+        try {
+            List<DownloadLink> links = new ArrayList<>();
+            JSONArray jsonArray = new JSONArray(json);
+            for (int i = 0; i < jsonArray.length(); i++) {
+                JSONObject jsonObject = jsonArray.getJSONObject(i);
+                DownloadLink link = new DownloadLink();
+                link.setId(jsonObject.optString("id"));
+                link.setName(jsonObject.optString("name"));
+                link.setFileName(jsonObject.optString("fileName"));
+                link.setUrl(jsonObject.optString("url"));
+                link.setSize(jsonObject.optLong("size"));
+                links.add(link);
+            }
+            return links;
+        } catch (JSONException e) {
+            Log.e(TAG, "Error deserializing download links", e);
+            return null;
+        }
+    }
     
     // Classe interna para gerenciar download de múltiplos arquivos
     private class BatchDownloadTask implements Runnable {
         private Game game;
         private List<DownloadLink> downloadLinks;
         private volatile boolean cancelled = false;
+        private volatile boolean paused = false;
         private int currentFileIndex = 0;
         private SpeedMeter speedMeter = new SpeedMeter();
         
@@ -1000,9 +1080,24 @@ public class DownloadService extends Service {
         public void cancel() {
             cancelled = true;
         }
+
+        public void pause() {
+            paused = true;
+        }
+
+        public void resume() {
+            paused = false;
+            // A lógica de resumo real será reiniciar a tarefa
+        }
         
         @Override
         public void run() {
+            // Load current progress before starting
+            ContentValues batchData = databaseHelper.getDownloadBatch(game.getId());
+            if (batchData != null) {
+                this.currentFileIndex = batchData.getAsInteger("completed_files");
+            }
+
             try {
                 downloadFiles();
             } catch (Exception e) {
@@ -1023,7 +1118,7 @@ public class DownloadService extends Service {
             
             long totalBytesDownloaded = 0;
             
-            for (int i = 0; i < downloadLinks.size() && !cancelled; i++) {
+            for (int i = 0; i < downloadLinks.size() && !cancelled && !paused; i++) {
                 currentFileIndex = i;
                 DownloadLink currentLink = downloadLinks.get(i);
                 
@@ -1085,6 +1180,13 @@ public class DownloadService extends Service {
                     // Fazer download do arquivo
                     long fileBytesDownloaded = downloadFile(currentLink, totalBytesDownloaded, totalBytesAllFiles);
                     totalBytesDownloaded += fileBytesDownloaded;
+
+                    // Update batch progress after successful file download
+                    ContentValues batch = databaseHelper.getDownloadBatch(game.getId());
+                    if (batch != null) {
+                        long batchId = batch.getAsLong("id");
+                        databaseHelper.updateBatchProgress(batchId, currentFileIndex + 1, "DOWNLOADING");
+                    }
                     
                 } catch (Exception e) {
                     Log.e(TAG, "Error downloading file: " + currentLink.getName(), e);
@@ -1094,7 +1196,15 @@ public class DownloadService extends Service {
                 }
             }
             
-            if (!cancelled) {
+            if (paused) {
+                Log.d(TAG, "Batch download paused for: " + game.getTitle());
+                ContentValues batch = databaseHelper.getDownloadBatch(game.getId());
+                if (batch != null) {
+                    long batchId = batch.getAsLong("id");
+                    databaseHelper.updateBatchProgress(batchId, currentFileIndex, "PAUSED");
+                }
+                onDownloadPaused(game);
+            } else if (!cancelled) {
                 // Todos os downloads concluídos
                 Log.d(TAG, "Batch download completed for: " + game.getTitle());
                 
