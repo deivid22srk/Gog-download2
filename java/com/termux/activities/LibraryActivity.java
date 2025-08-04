@@ -322,6 +322,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     }
 
     private void executeInstallScript(String scriptPath) {
+        ensureTermuxIsReady();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + getPackageName()));
@@ -337,6 +338,24 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home");
         intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
         startService(intent);
+    }
+
+    private void ensureTermuxIsReady() {
+        try {
+            File termuxDir = new File("/data/data/com.termux/files/home/.termux");
+            if (!termuxDir.exists()) {
+                termuxDir.mkdirs();
+            }
+            File propertiesFile = new File(termuxDir, "termux.properties");
+            if (!propertiesFile.exists()) {
+                try (FileWriter writer = new FileWriter(propertiesFile)) {
+                    writer.write("allow-external-apps=true\n");
+                }
+            }
+        } catch (IOException e) {
+            Log.e("LibraryActivity", "Failed to create termux.properties file", e);
+            Toast.makeText(this, "Failed to configure Termux.", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private String createAndSaveInstallScript(String sourceDir, String destDir) {
