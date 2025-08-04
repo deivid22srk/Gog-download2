@@ -570,7 +570,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         }
 
         Intent intent = new Intent();
-        intent.setClassName("com.termux", "com.termux.app.TermuxActivity");
+        intent.setClassName("com.termux", "com.termux.app.RunCommandService");
         intent.setAction("com.termux.RUN_COMMAND");
         intent.putExtra("com.termux.RUN_COMMAND_PATH", bashPath);
         intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", command});
@@ -578,14 +578,14 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         String workDir = externalDir != null ? externalDir.getAbsolutePath() : "/sdcard";
         intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", workDir);
         intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
         try {
-            startActivity(intent);
-            Log.d("LibraryActivity", "Launched Termux activity with command: " + command);
+            startService(intent);
+            Toast.makeText(this, "Iniciando instalação via Termux... Verifique a notificação.", Toast.LENGTH_LONG).show();
+            Log.d("LibraryActivity", "Started Termux service with command: " + command);
         } catch (Exception e) {
-            Log.e("LibraryActivity", "Failed to launch Termux activity", e);
-            Toast.makeText(this, "Erro ao iniciar o Termux: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Log.e("LibraryActivity", "Failed to start Termux service", e);
+            Toast.makeText(this, "Erro ao iniciar o serviço do Termux: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
     
