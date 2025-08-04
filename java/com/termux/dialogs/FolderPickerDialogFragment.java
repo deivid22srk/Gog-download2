@@ -59,7 +59,7 @@ public class FolderPickerDialogFragment extends DialogFragment {
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
 
         currentPath = Environment.getExternalStorageDirectory();
-        listFolders(currentPath);
+        listFiles(currentPath);
 
         selectButton.setOnClickListener(v -> {
             if (listener != null) {
@@ -71,75 +71,90 @@ public class FolderPickerDialogFragment extends DialogFragment {
         cancelButton.setOnClickListener(v -> dismiss());
     }
 
-    private void listFolders(File path) {
+    private void listFiles(File path) {
         currentPath = path;
         currentPathTextView.setText(path.getAbsolutePath());
 
-        File[] files = path.listFiles();
-        List<File> folderList = new ArrayList<>();
+        File[] files = path.listFiles((dir, name) -> {
+            File file = new File(dir, name);
+            return file.isDirectory() || name.toLowerCase().endsWith(".bin") || name.toLowerCase().endsWith(".exe");
+        });
+
+        List<File> fileList = new ArrayList<>();
         if (files != null) {
-            for (File file : files) {
-                if (file.isDirectory()) {
-                    folderList.add(file);
-                }
-            }
+            fileList.addAll(Arrays.asList(files));
         }
-        Collections.sort(folderList, (f1, f2) -> f1.getName().compareToIgnoreCase(f2.getName()));
+        Collections.sort(fileList, (f1, f2) -> {
+            if (f1.isDirectory() && !f2.isDirectory()) {
+                return -1;
+            } else if (!f1.isDirectory() && f2.isDirectory()) {
+                return 1;
+            } else {
+                return f1.getName().compareToIgnoreCase(f2.getName());
+            }
+        });
 
         if (!path.equals(Environment.getExternalStorageDirectory())) {
-            folderList.add(0, new File(path, ".."));
+            fileList.add(0, new File(path, ".."));
         }
 
-        recyclerView.setAdapter(new FolderAdapter(folderList, this::onFolderClicked));
+        recyclerView.setAdapter(new FolderAdapter(fileList, this::onFileClicked));
     }
 
-    private void onFolderClicked(File folder) {
-        if (folder.getName().equals("..")) {
-            listFolders(folder.getParentFile().getParentFile());
-        } else {
-            listFolders(folder);
+    private void onFileClicked(File file) {
+        if (file.getName().equals("..")) {
+            listFiles(file.getParentFile().getParentFile());
+        } else if (file.isDirectory()) {
+            listFiles(file);
         }
     }
 
     private static class FolderAdapter extends RecyclerView.Adapter<FolderAdapter.FolderViewHolder> {
 
-        private final List<File> folders;
-        private final OnFolderClickListener listener;
+        private final List<File> files;
+        private final OnFileClickListener listener;
 
-        public interface OnFolderClickListener {
-            void onFolderClick(File file);
+        public interface OnFileClickListener {
+            void onFileClick(File file);
         }
 
-        public FolderAdapter(List<File> folders, OnFolderClickListener listener) {
-            this.folders = folders;
+        public FolderAdapter(List<File> files, OnFileClickListener listener) {
+            this.files = files;
             this.listener = listener;
         }
 
         @NonNull
         @Override
         public FolderViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View view = LayoutInflater.from(parent.getContext()).inflate(android.R.layout.simple_list_item_1, parent, false);
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.list_item_folder, parent, false);
             return new FolderViewHolder(view);
         }
 
         @Override
         public void onBindViewHolder(@NonNull FolderViewHolder holder, int position) {
-            File folder = folders.get(position);
-            holder.textView.setText(folder.getName());
-            holder.itemView.setOnClickListener(v -> listener.onFolderClick(folder));
+            File file = files.get(position);
+            holder.textView.setText(file.getName());
+            if (file.isDirectory()) {
+                holder.icon.setImageResource(R.drawable.ic_folder);
+            } else {
+                holder.icon.setImageResource(R.drawable.ic_file);
+            }
+            holder.itemView.setOnClickListener(v -> listener.onFileClick(file));
         }
 
         @Override
         public int getItemCount() {
-            return folders.size();
+            return files.size();
         }
 
         static class FolderViewHolder extends RecyclerView.ViewHolder {
             TextView textView;
+            ImageView icon;
 
             public FolderViewHolder(@NonNull View itemView) {
                 super(itemView);
-                textView = itemView.findViewById(android.R.id.text1);
+                textView = itemView.findViewById(R.id.itemName);
+                icon = itemView.findViewById(R.id.itemIcon);
             }
         }
     }
