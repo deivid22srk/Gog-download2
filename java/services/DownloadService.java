@@ -33,16 +33,21 @@ import java.io.OutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.ArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import android.content.BroadcastReceiver;
 import android.content.ContentValues;
+import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -86,6 +91,8 @@ public class DownloadService extends Service {
     private ExecutorService executorService;
     private Map<Long, DownloadTask> activeDownloads;
     private Map<Long, BatchDownloadTask> activeBatchDownloads;
+    private Set<Long> autoPausedDownloads;
+    private NetworkChangeReceiver networkChangeReceiver;
     
     private GOGLibraryManager libraryManager;
     private DatabaseHelper databaseHelper;
@@ -136,8 +143,10 @@ public class DownloadService extends Service {
         
         notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         executorService = Executors.newFixedThreadPool(3); // Máximo 3 downloads simultâneos
-        activeDownloads = new HashMap<>();
-        activeBatchDownloads = new HashMap<>();
+        activeDownloads = new ConcurrentHashMap<>();
+        activeBatchDownloads = new ConcurrentHashMap<>();
+        autoPausedDownloads = new HashSet<>();
+        networkChangeReceiver = new NetworkChangeReceiver();
         
         libraryManager = new GOGLibraryManager(this);
         databaseHelper = new DatabaseHelper(this);
@@ -160,6 +169,10 @@ public class DownloadService extends Service {
         // Retomar downloads pendentes
         resumePendingDownloads();
         
+        // Registrar o receiver de mudança de rede
+        IntentFilter intentFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
+        registerReceiver(networkChangeReceiver, intentFilter);
+
         Log.d(TAG, "DownloadService created");
     }
     
@@ -238,6 +251,13 @@ public class DownloadService extends Service {
         
         if (databaseHelper != null) {
             databaseHelper.close();
+        }
+
+        // Desregistrar o receiver
+        try {
+            unregisterReceiver(networkChangeReceiver);
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "NetworkChangeReceiver was not registered", e);
         }
         
         Log.d(TAG, "DownloadService destroyed");
@@ -364,21 +384,28 @@ public class DownloadService extends Service {
                     Game game = databaseHelper.getGame(gameId);
                     if (game == null) {
                         Log.w(TAG, "Game not found for ID: " + gameId + ", cleaning up downloads");
-                        // Limpar downloads órfãos
                         for (ContentValues download : gameDownloads) {
                             long downloadId = download.getAsLong("id");
                             databaseHelper.updateDownloadStatus(downloadId, "CANCELLED", "Game not found");
                         }
                         continue;
                     }
-                    
-                    if (gameDownloads.size() == 1) {
-                        // Download único
-                        ContentValues download = gameDownloads.get(0);
-                        resumeSingleDownload(game, download);
+
+                    // Check the status to decide whether to auto-resume
+                    String status = gameDownloads.get(0).getAsString("status");
+                    if ("PAUSED".equals(status)) {
+                        // If it was explicitly paused by the user, do not auto-resume.
+                        // Instead, re-broadcast the paused status to ensure the UI is up-to-date.
+                        Log.d(TAG, "Skipping auto-resume for user-paused download: " + game.getTitle());
+                        onDownloadPaused(game);
                     } else {
-                        // Batch download
-                        resumeBatchDownload(game, gameDownloads);
+                        // If it was PENDING or DOWNLOADING, auto-resume for crash recovery.
+                        Log.d(TAG, "Auto-resuming interrupted download: " + game.getTitle());
+                        if (gameDownloads.size() == 1) {
+                            resumeSingleDownload(game, gameDownloads.get(0));
+                        } else {
+                            resumeBatchDownload(game, gameDownloads);
+                        }
                     }
                 }
                 
@@ -1301,6 +1328,45 @@ public class DownloadService extends Service {
                     }
                     throw e;
                 }
+            }
+        }
+    }
+
+    // Receiver para monitorar mudanças na conexão de rede
+    private class NetworkChangeReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            try {
+                ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+                boolean isConnected = activeNetwork != null && activeNetwork.isConnectedOrConnecting();
+
+                if (isConnected) {
+                    Log.d(TAG, "Network connection re-established. Resuming auto-paused downloads.");
+                    // Create a copy to avoid ConcurrentModificationException while iterating
+                    Set<Long> gamesToResume = new HashSet<>(autoPausedDownloads);
+                    for (Long gameId : gamesToResume) {
+                        resumeDownload(gameId);
+                    }
+                    autoPausedDownloads.clear();
+                } else {
+                    Log.d(TAG, "Network connection lost. Pausing all active downloads.");
+                    // Pause all downloads that are not already paused
+                    Set<Long> allActiveIds = new HashSet<>();
+                    allActiveIds.addAll(activeDownloads.keySet());
+                    allActiveIds.addAll(activeBatchDownloads.keySet());
+
+                    for (Long gameId : allActiveIds) {
+                        // Check if the download is actually running before pausing
+                        Game game = databaseHelper.getGame(gameId);
+                        if (game != null && game.getStatus() == Game.DownloadStatus.DOWNLOADING) {
+                             pauseDownload(gameId);
+                             autoPausedDownloads.add(gameId);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error in NetworkChangeReceiver", e);
             }
         }
     }
