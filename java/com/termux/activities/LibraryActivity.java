@@ -118,8 +118,6 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         }
 
         setupFolderPickerLauncher();
-        setupInstallFolderPickerLauncher();
-        setupSourceFilePickerLauncher();
         initializeViews();
         setupToolbar();
         setupRecyclerView();
