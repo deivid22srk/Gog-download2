@@ -198,4 +198,9 @@ public class PermissionHelper {
         this.currentCallback = callback;
         permissionLauncher.launch(allPermissions.toArray(new String[0]));
     }
+
+    public void requestPermissions(String[] permissions, PermissionCallback callback) {
+        this.currentCallback = callback;
+        permissionLauncher.launch(permissions);
+    }
 }

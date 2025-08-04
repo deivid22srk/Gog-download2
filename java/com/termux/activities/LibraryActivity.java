@@ -332,6 +332,15 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 // Não mostrar erro, pois SAF funciona sem essas permissões
             }
         });
+
+        permissionHelper.requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, new PermissionHelper.PermissionCallback() {
+            @Override
+            public void onResult(boolean granted) {
+                if (!granted) {
+                    showError("A permissão de leitura de armazenamento é necessária para acessar os arquivos de instalação.");
+                }
+            }
+        });
         
         // Permissões de notificação são importantes para o progresso de download
         permissionHelper.requestNotificationPermissions(granted -> {
