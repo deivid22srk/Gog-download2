@@ -24,6 +24,7 @@ import android.os.Environment;
 import android.provider.Settings;
 import android.util.Log;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -92,15 +93,15 @@ public class FolderSelectionActivity extends BaseActivity {
         overlayPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
-                // After returning from settings, continue the permission check chain
-                checkAndRequestPermissions();
+                // After returning from settings, update the UI
+                updateUI();
             });
 
         storagePermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
-                // After returning from settings, continue the permission check chain
-                checkAndRequestPermissions();
+                // After returning from settings, update the UI
+                updateUI();
             });
     }
 
