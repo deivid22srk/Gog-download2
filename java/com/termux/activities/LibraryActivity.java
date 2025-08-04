@@ -5,6 +5,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
 import android.provider.Settings;
@@ -248,17 +249,6 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         refreshButton.setOnClickListener(v -> refreshLibrary());
         retryButton.setOnClickListener(v -> loadLibrary());
         installFab.setOnClickListener(v -> openInstallerFolderPicker());
-
-        overlayPermissionLauncher = registerForActivityResult(
-            new ActivityResultContracts.StartActivityForResult(),
-            result -> {
-                if (Settings.canDrawOverlays(this)) {
-                    launchTermuxForInstallation();
-                } else {
-                    Toast.makeText(this, "A permissão para sobrepor outros apps é necessária para iniciar o Termux.", Toast.LENGTH_SHORT).show();
-                }
-            }
-        );
         
         // Configurar SearchEditText
         searchEditText.addTextChangedListener(new TextWatcher() {
