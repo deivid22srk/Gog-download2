@@ -115,7 +115,6 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         setupToolbar();
         setupRecyclerView();
         setupClickListeners();
-        setupInstallFolderPickerLauncher();
         checkPermissions();
         loadLibrary();
         
