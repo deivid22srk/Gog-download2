@@ -369,7 +369,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getReadableDatabase();
         
         Cursor cursor = db.query(TABLE_DOWNLOADS, null, 
-                COLUMN_DOWNLOAD_STATUS + " IN ('PENDING', 'DOWNLOADING')", null,
+                COLUMN_DOWNLOAD_STATUS + " IN ('PENDING', 'DOWNLOADING', 'PAUSED')", null,
                 null, null, COLUMN_DOWNLOAD_START_TIME + " ASC");
         
         if (cursor != null) {

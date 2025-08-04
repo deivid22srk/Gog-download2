@@ -719,15 +719,22 @@ public class DownloadService extends Service {
             databaseHelper.updateDownloadStatus(downloadId, "DOWNLOADING", null);
             try {
                 downloadFile();
+
+                // Após o loop, verificar o estado final
+                if (paused) {
+                    Log.d(TAG, "Download paused for game: " + game.getTitle());
+                    databaseHelper.updateDownloadStatus(downloadId, "PAUSED", null);
+                } else if (cancelled) {
+                    Log.d(TAG, "Download cancelled for game: " + game.getTitle());
+                    databaseHelper.updateDownloadStatus(downloadId, "CANCELLED", null);
+                }
+                // Se não foi pausado nem cancelado, onDownloadComplete já foi chamado
+
             } catch (Exception e) {
                 if (!cancelled && !paused) {
                     Log.e(TAG, "Download error", e);
                     onDownloadError(game, e.getMessage());
                     databaseHelper.updateDownloadStatus(downloadId, "FAILED", e.getMessage());
-                } else if (paused) {
-                    databaseHelper.updateDownloadStatus(downloadId, "PAUSED", null);
-                } else {
-                    databaseHelper.updateDownloadStatus(downloadId, "CANCELLED", null);
                 }
             }
         }
@@ -831,7 +838,7 @@ public class DownloadService extends Service {
                 try (InputStream inputStream = response.body().byteStream();
                      OutputStream outputStream = safDownloadManager.getOutputStream(outputFile, downloadedBytes > 0)) {
                     
-                    byte[] buffer = new byte[65536]; // 64KB buffer para melhor performance
+                    byte[] buffer = new byte[262144]; // 256KB buffer para melhor performance
                     int bytesRead;
                     
                     long lastProgressUpdate = System.currentTimeMillis();
@@ -915,7 +922,7 @@ public class DownloadService extends Service {
                      FileOutputStream outputStream = new FileOutputStream(outputFile)) {
                     
                     long bytesDownloaded = 0;
-                    byte[] buffer = new byte[65536]; // 64KB buffer para melhor performance
+                    byte[] buffer = new byte[262144]; // 256KB buffer para melhor performance
                     int bytesRead;
                     
                     long lastProgressUpdate = System.currentTimeMillis();
@@ -1134,7 +1141,7 @@ public class DownloadService extends Service {
                      OutputStream outputStream = safDownloadManager.getOutputStream(outputFile, false)) {
                     
                     long fileBytesDownloaded = 0;
-                    byte[] buffer = new byte[65536]; // 64KB buffer para melhor performance
+                    byte[] buffer = new byte[262144]; // 256KB buffer para melhor performance
                     int bytesRead;
                     
                     long lastProgressUpdate = System.currentTimeMillis();
