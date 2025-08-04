@@ -1,7 +1,9 @@
 package com.termux.utils;
 
 import android.content.Context;
+import android.database.Cursor;
 import android.net.Uri;
+import android.provider.DocumentsContract;
 import android.util.Log;
 
 import androidx.documentfile.provider.DocumentFile;
@@ -275,5 +277,24 @@ public class SAFDownloadManager {
         }
         
         return "Nenhuma pasta selecionada";
+    }
+
+    public String getRealPathFromURI(final Uri uri) {
+        if (DocumentsContract.isDocumentUri(context, uri)) {
+            if (isExternalStorageDocument(uri)) {
+                final String docId = DocumentsContract.getDocumentId(uri);
+                final String[] split = docId.split(":");
+                final String type = split[0];
+
+                if ("primary".equalsIgnoreCase(type)) {
+                    return context.getExternalFilesDir(null) + "/" + split[1];
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isExternalStorageDocument(Uri uri) {
+        return "com.android.externalstorage.documents".equals(uri.getAuthority());
     }
 }

@@ -302,7 +302,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         startService(intent);
     }
 
-    private void launchTermuxWithUris(Uri sourceUri, Uri destinationUri) {
+    private void launchTermuxWithPaths(String sourcePath, String destinationPath) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + getPackageName()));
@@ -311,7 +311,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         }
 
         String command = "if ! command -v innoextract &> /dev/null; then pkg install -y innoextract; fi && " +
-                "innoextract -d \"" + destinationUri.toString() + "\" \"" + sourceUri.toString() + "\"/*.bin";
+                "innoextract -d \"" + destinationPath + "\" \"" + sourcePath + "\"/*.bin";
 
         Intent intent = new Intent();
         intent.setClassName("com.termux", "com.termux.app.RunCommandService");
@@ -995,10 +995,19 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                     if (result.getResultCode() == RESULT_OK && result.getData() != null) {
                         Uri sourceUri = result.getData().getData();
                         if (sourceUri != null) {
+                            SAFDownloadManager safManager = new SAFDownloadManager(this);
+                            String sourcePath = safManager.getRealPathFromURI(sourceUri);
+
                             String destinationUriString = preferencesManager.getInstallUri();
                             if (destinationUriString != null) {
                                 Uri destinationUri = Uri.parse(destinationUriString);
-                                launchTermuxWithUris(sourceUri, destinationUri);
+                                String destinationPath = safManager.getRealPathFromURI(destinationUri);
+
+                                if (sourcePath != null && destinationPath != null) {
+                                    launchTermuxWithPaths(sourcePath, destinationPath);
+                                } else {
+                                    Toast.makeText(this, "Não foi possível obter os caminhos reais das pastas.", Toast.LENGTH_SHORT).show();
+                                }
                             } else {
                                 Toast.makeText(this, "Pasta de instalação não configurada.", Toast.LENGTH_SHORT).show();
                             }
