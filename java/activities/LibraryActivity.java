@@ -135,7 +135,15 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
             @Override
             public void onReceive(Context context, Intent intent) {
                 long gameId = intent.getLongExtra(DownloadService.EXTRA_GAME_ID, -1);
-                if (gameId != -1) {
+                if (gameId == -1) return;
+
+                String statusStr = intent.getStringExtra(DownloadService.EXTRA_DOWNLOAD_STATUS);
+                if (statusStr != null) {
+                    // Handle status-only updates (like PAUSED)
+                    Game.DownloadStatus status = Game.DownloadStatus.valueOf(statusStr);
+                    gamesAdapter.updateGameStatus(gameId, status);
+                } else {
+                    // Handle regular progress updates
                     gamesAdapter.updateGameProgress(
                         gameId,
                         intent.getLongExtra(DownloadService.EXTRA_BYTES_DOWNLOADED, 0),

@@ -70,6 +70,7 @@ public class DownloadService extends Service {
     public static final String EXTRA_TOTAL_FILES = "extra_total_files";
     public static final String EXTRA_DOWNLOAD_SPEED = "extra_download_speed";
     public static final String EXTRA_ETA = "extra_eta";
+    public static final String EXTRA_DOWNLOAD_STATUS = "extra_download_status";
     private static final String EXTRA_GAME = "extra_game";
     private static final String EXTRA_DOWNLOAD_LINK = "extra_download_link";
     private static final String EXTRA_DOWNLOAD_LINKS = "extra_download_links";
@@ -562,6 +563,14 @@ public class DownloadService extends Service {
         }
     }
     
+    private void onDownloadPaused(Game game) {
+        Log.d(TAG, "Broadcasting pause for game: " + game.getTitle());
+        Intent intent = new Intent(ACTION_DOWNLOAD_PROGRESS);
+        intent.putExtra(EXTRA_GAME_ID, game.getId());
+        intent.putExtra(EXTRA_DOWNLOAD_STATUS, Game.DownloadStatus.PAUSED.name());
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+    }
+
     private void onDownloadComplete(Game game, long downloadId, String filePath) {
         Log.d(TAG, "Download completed for game: " + game.getTitle());
         
@@ -724,6 +733,7 @@ public class DownloadService extends Service {
                 if (paused) {
                     Log.d(TAG, "Download paused for game: " + game.getTitle());
                     databaseHelper.updateDownloadStatus(downloadId, "PAUSED", null);
+                    onDownloadPaused(game);
                 } else if (cancelled) {
                     Log.d(TAG, "Download cancelled for game: " + game.getTitle());
                     databaseHelper.updateDownloadStatus(downloadId, "CANCELLED", null);
