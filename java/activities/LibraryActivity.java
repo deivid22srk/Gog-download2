@@ -291,6 +291,43 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         });
     }
 
+    private String getTermuxHomePath() {
+        return "/data/data/com.termux/files/home";
+    }
+
+    private boolean ensureTermuxIsReady() {
+        try {
+            String termuxHomeDir = getTermuxHomePath();
+            File termuxConfigDir = new File(termuxHomeDir, ".termux");
+            if (!termuxConfigDir.exists()) {
+                if (!termuxConfigDir.mkdirs()) {
+                    Log.e("LibraryActivity", "Failed to create .termux directory");
+                    Toast.makeText(this, "Erro: Não foi possível criar diretório de configuração do Termux.", Toast.LENGTH_LONG).show();
+                    return false;
+                }
+            }
+
+            File propertiesFile = new File(termuxConfigDir, "termux.properties");
+            if (!propertiesFile.exists()) {
+                try (FileWriter writer = new FileWriter(propertiesFile)) {
+                    writer.write("allow-external-apps=true\n");
+                }
+            } else {
+                String content = readFileContent(propertiesFile);
+                if (!content.contains("allow-external-apps=true")) {
+                    try (FileWriter writer = new FileWriter(propertiesFile, true)) {
+                        writer.write("\nallow-external-apps=true\n");
+                    }
+                }
+            }
+            return true;
+        } catch (IOException e) {
+            Log.e("LibraryActivity", "Failed to configure Termux", e);
+            Toast.makeText(this, "Erro ao configurar Termux: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            return false;
+        }
+    }
+
     private boolean checkTermuxInstallation() {
         try {
             PackageInfo packageInfo = getPackageManager().getPackageInfo("com.termux", 0);
@@ -461,6 +498,11 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     }
 
     private void installGameWithInnoextract(String sourceDir, String destDir) {
+        if (!ensureTermuxIsReady()) {
+            Toast.makeText(this, "Não foi possível configurar o Termux. A instalação pode falhar.", Toast.LENGTH_LONG).show();
+            // Continuar mesmo assim, pois o usuário pode ter configurado manualmente.
+        }
+
         String gameInstallScript = createGameInstallScript(sourceDir, destDir);
         String termuxScriptPath = saveScriptToAppExternalDir(gameInstallScript);
         if (termuxScriptPath != null) {
