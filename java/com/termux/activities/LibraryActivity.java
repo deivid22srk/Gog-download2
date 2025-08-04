@@ -90,6 +90,8 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     
     // Launcher para seleção de pasta de download
     private ActivityResultLauncher<Intent> folderPickerLauncher;
+    private ActivityResultLauncher<Intent> installerFolderPickerLauncher;
+    private ActivityResultLauncher<Intent> sourceFilePickerLauncher;
     private Game pendingDownloadGame; // Jogo aguardando seleção de pasta
     private DownloadLink pendingDownloadLink; // Para compatibilidade com código antigo
     private List<DownloadLink> pendingSelectedLinks; // Para múltiplos downloads
@@ -114,6 +116,8 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         }
 
         setupFolderPickerLauncher();
+        setupInstallFolderPickerLauncher();
+        setupSourceFilePickerLauncher();
         initializeViews();
         setupToolbar();
         setupRecyclerView();
@@ -168,6 +172,56 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                         // Usuário cancelou seleção
                         pendingDownloadGame = null;
                         Toast.makeText(this, "Seleção de pasta cancelada", Toast.LENGTH_SHORT).show();
+                    }
+                });
+    }
+
+    private void setupInstallFolderPickerLauncher() {
+        installerFolderPickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                        Uri uri = result.getData().getData();
+                        if (uri != null) {
+                            preferencesManager.setInstallUri(uri.toString());
+                            Toast.makeText(this, "Pasta de instalação selecionada: " + uri.toString(), Toast.LENGTH_SHORT).show();
+                            openSourceFilePicker();
+                        }
+                    }
+                });
+    }
+
+    private void openSourceFilePicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        sourceFilePickerLauncher.launch(intent);
+    }
+
+    private void setupSourceFilePickerLauncher() {
+        sourceFilePickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                        List<Uri> uris = new ArrayList<>();
+                        if (result.getData().getClipData() != null) {
+                            for (int i = 0; i < result.getData().getClipData().getItemCount(); i++) {
+                                uris.add(result.getData().getClipData().getItemAt(i).getUri());
+                            }
+                        } else {
+                            uris.add(result.getData().getData());
+                        }
+
+                        if (!uris.isEmpty()) {
+                            String destinationPath = SAFDownloadManager.getRealPathFromURI(this, Uri.parse(preferencesManager.getInstallUri()));
+                            if (destinationPath != null) {
+                                List<String> sourcePaths = new ArrayList<>();
+                                for (Uri uri : uris) {
+                                    sourcePaths.add(SAFDownloadManager.getRealPathFromURI(this, uri));
+                                }
+                                launchTermuxWithPaths(sourcePaths, destinationPath);
+                            }
+                        }
                     }
                 });
     }
@@ -252,6 +306,16 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         refreshButton.setOnClickListener(v -> refreshLibrary());
         retryButton.setOnClickListener(v -> loadLibrary());
         installFab.setOnClickListener(v -> openInstallerFolderPicker());
+
+        overlayPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(this)) {
+                        openInstallerFolderPicker();
+                    } else {
+                        Toast.makeText(this, "A permissão de sobreposição é necessária para a instalação.", Toast.LENGTH_SHORT).show();
+                    }
+                });
         
         // Configurar SearchEditText
         searchEditText.addTextChangedListener(new TextWatcher() {
@@ -305,7 +369,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         startService(intent);
     }
 
-    private void launchTermuxWithPaths(String sourcePath, String destinationPath) {
+    private void launchTermuxWithPaths(List<String> sourcePaths, String destinationPath) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + getPackageName()));
@@ -313,14 +377,18 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
             return;
         }
 
-        String command = "if ! command -v innoextract &> /dev/null; then pkg install -y innoextract; fi && " +
-                "innoextract -d \"" + destinationPath + "\" \"" + sourcePath + "\"/*.bin";
+        StringBuilder commandBuilder = new StringBuilder();
+        commandBuilder.append("if ! command -v innoextract &> /dev/null; then pkg install -y innoextract; fi");
+
+        for (String sourcePath : sourcePaths) {
+            commandBuilder.append(" && innoextract -d \"").append(destinationPath).append("\" \"").append(sourcePath).append("\"");
+        }
 
         Intent intent = new Intent();
         intent.setClassName("com.termux", "com.termux.app.RunCommandService");
         intent.setAction("com.termux.RUN_COMMAND");
         intent.putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash");
-        intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", command});
+        intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", commandBuilder.toString()});
         intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home");
         intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
         startService(intent);
@@ -1002,7 +1070,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     
     private void openInstallerFolderPicker() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
         installerFolderPickerLauncher.launch(intent);
     }
 
