@@ -295,12 +295,8 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         try {
             PackageInfo packageInfo = getPackageManager().getPackageInfo("com.termux", 0);
             
-            // Verificar se o diretório do Termux existe
-            File termuxHome = new File(getTermuxHomeDir());
-            if (!termuxHome.exists()) {
-                showTermuxNotConfiguredDialog();
-                return false;
-            }
+            // A verificação do diretório home do Termux foi removida porque
+            // não é confiável em versões modernas do Android devido a restrições de armazenamento.
             
             // Verificar se o bash existe
             String bashPath = getTermuxBashPath();
