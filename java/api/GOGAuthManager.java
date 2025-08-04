@@ -518,6 +518,38 @@ public class GOGAuthManager {
     }
     
     /**
+     * Renova o token de acesso usando o refresh token salvo nas preferências.
+     * @param callback Callback para o resultado.
+     */
+    public void refreshAccessToken(AuthCallback callback) {
+        com.termux.utils.PreferencesManager prefs = new com.termux.utils.PreferencesManager(context);
+        String refreshToken = prefs.getRefreshToken();
+
+        if (refreshToken == null || refreshToken.isEmpty()) {
+            callback.onError("Nenhum refresh token disponível. Faça o login novamente.");
+            return;
+        }
+
+        refreshToken(refreshToken, new AuthCallback() {
+            @Override
+            public void onSuccess(String newAuthToken, String newRefreshToken) {
+                // Salvar os novos tokens
+                prefs.saveAuthData(newAuthToken, newRefreshToken, prefs.getUserEmail(), prefs.getDisplayName(), prefs.getUserId(), prefs.getUserAvatar());
+                Log.d(TAG, "Access token successfully refreshed and saved.");
+                callback.onSuccess(newAuthToken, newRefreshToken);
+            }
+
+            @Override
+            public void onError(String error) {
+                // Se a renovação falhar (e.g. refresh token também expirou),
+                // o erro será propagado para o chamador.
+                Log.e(TAG, "Failed to refresh access token: " + error);
+                callback.onError(error);
+            }
+        });
+    }
+
+    /**
      * Renova o token de acesso usando o refresh token
      * @param refreshToken Refresh token
      * @param callback Callback para resultado
