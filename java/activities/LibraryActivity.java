@@ -412,10 +412,6 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         return null;
     }
 
-    private String getTermuxHomeDir() {
-        return "/data/data/com.termux/files/home";
-    }
-
     private String readFileContent(File file) throws IOException {
         StringBuilder content = new StringBuilder();
         try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(file))) {
@@ -546,7 +542,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
 
     private void installGameWithInnoextract(String sourceDir, String destDir) {
         String gameInstallScript = createGameInstallScript(sourceDir, destDir);
-        String termuxScriptPath = saveScriptToTermuxHome(gameInstallScript);
+        String termuxScriptPath = saveScriptToAppExternalDir(gameInstallScript);
         if (termuxScriptPath != null) {
             executeTermuxCommand("bash " + termuxScriptPath);
         }
@@ -616,31 +612,27 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 "read -p \"Pressione Enter para fechar esta janela...\"\"\n";
     }
     
-    private String saveScriptToTermuxHome(String scriptContent) {
+    private String saveScriptToAppExternalDir(String scriptContent) {
         try {
-            String termuxHomeDir = getTermuxHomeDir();
-            File termuxHome = new File(termuxHomeDir);
-            
-            // Verificar se o diretório home do Termux existe e é acessível
-            if (!termuxHome.exists() || !termuxHome.canWrite()) {
-                Log.e("LibraryActivity", "Termux home directory not accessible: " + termuxHomeDir);
-                Toast.makeText(this, "❌ Não foi possível acessar o diretório do Termux.", Toast.LENGTH_LONG).show();
+            File externalDir = getExternalFilesDir(null);
+            if (externalDir == null) {
+                Toast.makeText(this, "❌ Não foi possível acessar o armazenamento externo.", Toast.LENGTH_LONG).show();
                 return null;
             }
             
-            File scriptFile = new File(termuxHome, "gog_install.sh");
+            File scriptFile = new File(externalDir, "gog_install.sh");
             FileOutputStream fos = new FileOutputStream(scriptFile);
             fos.write(scriptContent.getBytes());
             fos.close();
             
-            // Dar permissão de execução
-            scriptFile.setExecutable(true);
+            // Set executable for owner, group, and others.
+            scriptFile.setExecutable(true, false);
             
             Log.d("LibraryActivity", "Script saved to: " + scriptFile.getAbsolutePath());
             return scriptFile.getAbsolutePath();
             
         } catch (IOException e) {
-            Log.e("LibraryActivity", "Error saving script to Termux home", e);
+            Log.e("LibraryActivity", "Error saving script to app external dir", e);
             Toast.makeText(this, "❌ Erro ao criar script de instalação.", Toast.LENGTH_LONG).show();
             return null;
         }
