@@ -490,7 +490,7 @@ public class DownloadService extends Service {
         ContentValues batchData = databaseHelper.getDownloadBatch(gameId);
         if (batchData != null) {
             String linksJson = batchData.getAsString("links_json");
-            List<DownloadLink> links = deserializeDownloadLinks(linksJson);
+            List<DownloadLink> links = DownloadLink.deserializeList(linksJson);
             if (links != null && !links.isEmpty()) {
                 Log.d(TAG, "Resuming batch download for: " + game.getTitle());
                 startBatchDownload(game, links);
