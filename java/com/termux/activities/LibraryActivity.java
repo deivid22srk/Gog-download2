@@ -213,17 +213,31 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                         }
 
                         if (!uris.isEmpty()) {
-                            String destinationPath = SAFDownloadManager.getRealPathFromURI(this, Uri.parse(preferencesManager.getInstallUri()));
+                            String destinationPath = getPathFromUri(Uri.parse(preferencesManager.getInstallUri()));
                             if (destinationPath != null) {
                                 List<String> sourcePaths = new ArrayList<>();
                                 for (Uri uri : uris) {
-                                    sourcePaths.add(SAFDownloadManager.getRealPathFromURI(this, uri));
+                                    sourcePaths.add(getPathFromUri(uri));
                                 }
                                 launchTermuxWithPaths(sourcePaths, destinationPath);
                             }
                         }
                     }
                 });
+    }
+
+    private String getPathFromUri(Uri uri) {
+        if (DocumentsContract.isDocumentUri(this, uri)) {
+            String docId = DocumentsContract.getDocumentId(uri);
+            if ("com.android.externalstorage.documents".equals(uri.getAuthority())) {
+                String[] split = docId.split(":");
+                String type = split[0];
+                if ("primary".equalsIgnoreCase(type)) {
+                    return getExternalFilesDir(null) + "/" + split[1];
+                }
+            }
+        }
+        return null;
     }
     
     private void handleSelectedFolder(android.net.Uri uri) {
