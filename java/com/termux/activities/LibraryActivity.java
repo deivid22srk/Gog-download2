@@ -213,32 +213,35 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                         }
 
                         if (!uris.isEmpty()) {
-                            String destinationPath = getPathFromUri(Uri.parse(preferencesManager.getInstallUri()));
-                            if (destinationPath != null) {
-                                List<String> sourcePaths = new ArrayList<>();
-                                for (Uri uri : uris) {
-                                    sourcePaths.add(getPathFromUri(uri));
-                                }
-                                launchTermuxWithPaths(sourcePaths, destinationPath);
+                            File tempDir = new File(getCacheDir(), "install_temp");
+                            if (!tempDir.exists()) {
+                                tempDir.mkdirs();
                             }
+
+                            List<String> tempFilePaths = new ArrayList<>();
+                            for (Uri uri : uris) {
+                                try {
+                                    InputStream inputStream = getContentResolver().openInputStream(uri);
+                                    File tempFile = new File(tempDir, new File(uri.getPath()).getName());
+                                    FileOutputStream outputStream = new FileOutputStream(tempFile);
+                                    byte[] buffer = new byte[1024];
+                                    int read;
+                                    while ((read = inputStream.read(buffer)) != -1) {
+                                        outputStream.write(buffer, 0, read);
+                                    }
+                                    outputStream.close();
+                                    inputStream.close();
+                                    tempFilePaths.add(tempFile.getAbsolutePath());
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                            launchTermuxWithPaths(tempFilePaths, preferencesManager.getInstallUri());
                         }
                     }
                 });
     }
 
-    private String getPathFromUri(Uri uri) {
-        if (DocumentsContract.isDocumentUri(this, uri)) {
-            String docId = DocumentsContract.getDocumentId(uri);
-            if ("com.android.externalstorage.documents".equals(uri.getAuthority())) {
-                String[] split = docId.split(":");
-                String type = split[0];
-                if ("primary".equalsIgnoreCase(type)) {
-                    return getExternalFilesDir(null) + "/" + split[1];
-                }
-            }
-        }
-        return null;
-    }
     
     private void handleSelectedFolder(android.net.Uri uri) {
         try {
