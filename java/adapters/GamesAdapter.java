@@ -71,6 +71,24 @@ public class GamesAdapter extends RecyclerView.Adapter<GamesAdapter.GameViewHold
         }
     }
 
+    public void updateGameStatus(long gameId, Game.DownloadStatus status) {
+        for (int i = 0; i < filteredGames.size(); i++) {
+            Game game = filteredGames.get(i);
+            if (game.getId() == gameId) {
+                game.setStatus(status);
+                notifyItemChanged(i);
+                break;
+            }
+        }
+        // Also update the master list
+        for (Game game : games) {
+            if (game.getId() == gameId) {
+                game.setStatus(status);
+                break;
+            }
+        }
+    }
+
     public void updateGameProgress(long gameId, long bytesDownloaded, long totalBytes) {
         updateGameProgress(gameId, bytesDownloaded, totalBytes, 0.0f, 0, 0, 0);
     }

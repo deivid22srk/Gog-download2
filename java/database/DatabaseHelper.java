@@ -23,7 +23,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     
     // Database info
     private static final String DATABASE_NAME = "gog_downloader.db";
-    private static final int DATABASE_VERSION = 2; // Versão atualizada para suporte a múltiplos downloads
+    private static final int DATABASE_VERSION = 3; // Adicionar links JSON para batches
     
     // Table names
     private static final String TABLE_GAMES = "games";
@@ -118,7 +118,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 TABLE_GAMES + "(" + COLUMN_GAME_ID + ")" +
             ")";
         
-    private static final String CREATE_DOWNLOAD_BATCHES_TABLE = 
+    private static final String COLUMN_BATCH_LINKS_JSON = "links_json";
+
+    private static final String CREATE_DOWNLOAD_BATCHES_TABLE =
         "CREATE TABLE " + TABLE_DOWNLOAD_BATCHES + " (" +
             COLUMN_BATCH_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
             COLUMN_BATCH_GAME_ID + " INTEGER NOT NULL, " +
@@ -127,7 +129,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             COLUMN_BATCH_STATUS + " TEXT DEFAULT 'PENDING', " +
             COLUMN_BATCH_START_TIME + " INTEGER DEFAULT 0, " +
             COLUMN_BATCH_END_TIME + " INTEGER DEFAULT 0, " +
-            "FOREIGN KEY(" + COLUMN_BATCH_GAME_ID + ") REFERENCES " + 
+            COLUMN_BATCH_LINKS_JSON + " TEXT, " +
+            "FOREIGN KEY(" + COLUMN_BATCH_GAME_ID + ") REFERENCES " +
                 TABLE_GAMES + "(" + COLUMN_GAME_ID + ")" +
         ")";
     
@@ -156,36 +159,19 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         
         if (oldVersion < 2) {
             // Migração da versão 1 para 2: adicionar suporte a múltiplos downloads
-            
-            // Fazer backup dos downloads existentes
-            List<ContentValues> existingDownloads = new ArrayList<>();
-            Cursor cursor = db.query(TABLE_DOWNLOADS, null, null, null, null, null, null);
-            if (cursor != null) {
-                while (cursor.moveToNext()) {
-                    ContentValues values = new ContentValues();
-                    values.put(COLUMN_DOWNLOAD_GAME_ID, cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_DOWNLOAD_GAME_ID)));
-                    values.put(COLUMN_DOWNLOAD_URL, cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_DOWNLOAD_URL)));
-                    values.put(COLUMN_DOWNLOAD_STATUS, cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_DOWNLOAD_STATUS)));
-                    existingDownloads.add(values);
-                }
-                cursor.close();
-            }
-            
-            // Recriar tabela de downloads com nova estrutura
             db.execSQL("DROP TABLE IF EXISTS " + TABLE_DOWNLOADS);
             db.execSQL(CREATE_DOWNLOADS_TABLE);
-            
-            // Criar nova tabela de batches
             db.execSQL(CREATE_DOWNLOAD_BATCHES_TABLE);
-            
-            // Recriar índices
             db.execSQL("CREATE INDEX idx_downloads_game_id ON " + TABLE_DOWNLOADS + "(" + COLUMN_DOWNLOAD_GAME_ID + ")");
             db.execSQL("CREATE INDEX idx_downloads_status ON " + TABLE_DOWNLOADS + "(" + COLUMN_DOWNLOAD_STATUS + ")");
             db.execSQL("CREATE INDEX idx_downloads_link_id ON " + TABLE_DOWNLOADS + "(" + COLUMN_DOWNLOAD_LINK_ID + ")");
             db.execSQL("CREATE INDEX idx_batches_game_id ON " + TABLE_DOWNLOAD_BATCHES + "(" + COLUMN_BATCH_GAME_ID + ")");
             db.execSQL("CREATE INDEX idx_batches_status ON " + TABLE_DOWNLOAD_BATCHES + "(" + COLUMN_BATCH_STATUS + ")");
-            
-            Log.d(TAG, "Database upgraded successfully to version 2");
+        }
+        if (oldVersion < 3) {
+            // Migração da versão 2 para 3: adicionar links_json aos batches
+            db.execSQL("ALTER TABLE " + TABLE_DOWNLOAD_BATCHES + " ADD COLUMN " + COLUMN_BATCH_LINKS_JSON + " TEXT;");
+            Log.d(TAG, "Database upgraded successfully to version 3");
         }
     }
     
@@ -369,7 +355,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getReadableDatabase();
         
         Cursor cursor = db.query(TABLE_DOWNLOADS, null, 
-                COLUMN_DOWNLOAD_STATUS + " IN ('PENDING', 'DOWNLOADING')", null,
+                COLUMN_DOWNLOAD_STATUS + " IN ('PENDING', 'DOWNLOADING', 'PAUSED')", null,
                 null, null, COLUMN_DOWNLOAD_START_TIME + " ASC");
         
         if (cursor != null) {
@@ -447,12 +433,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     
     // Métodos para gerenciar batches de download
     
-    public long createDownloadBatch(long gameId, int totalFiles) {
+    public long createDownloadBatch(long gameId, int totalFiles, String linksJson) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
         
         values.put(COLUMN_BATCH_GAME_ID, gameId);
         values.put(COLUMN_BATCH_TOTAL_FILES, totalFiles);
+        values.put(COLUMN_BATCH_LINKS_JSON, linksJson);
         values.put(COLUMN_BATCH_COMPLETED_FILES, 0);
         values.put(COLUMN_BATCH_STATUS, "PENDING");
         values.put(COLUMN_BATCH_START_TIME, System.currentTimeMillis());
@@ -500,6 +487,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             batch.put("total_files", cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_BATCH_TOTAL_FILES)));
             batch.put("completed_files", cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_BATCH_COMPLETED_FILES)));
             batch.put("status", cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_BATCH_STATUS)));
+            batch.put("links_json", cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_BATCH_LINKS_JSON)));
             cursor.close();
         }
         

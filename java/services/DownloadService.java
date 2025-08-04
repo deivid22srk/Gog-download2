@@ -33,20 +33,28 @@ import java.io.OutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.ArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import android.content.BroadcastReceiver;
 import android.content.ContentValues;
+import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class DownloadService extends Service {
     
@@ -70,6 +78,7 @@ public class DownloadService extends Service {
     public static final String EXTRA_TOTAL_FILES = "extra_total_files";
     public static final String EXTRA_DOWNLOAD_SPEED = "extra_download_speed";
     public static final String EXTRA_ETA = "extra_eta";
+    public static final String EXTRA_DOWNLOAD_STATUS = "extra_download_status";
     private static final String EXTRA_GAME = "extra_game";
     private static final String EXTRA_DOWNLOAD_LINK = "extra_download_link";
     private static final String EXTRA_DOWNLOAD_LINKS = "extra_download_links";
@@ -82,6 +91,8 @@ public class DownloadService extends Service {
     private ExecutorService executorService;
     private Map<Long, DownloadTask> activeDownloads;
     private Map<Long, BatchDownloadTask> activeBatchDownloads;
+    private Set<Long> autoPausedDownloads;
+    private NetworkChangeReceiver networkChangeReceiver;
     
     private GOGLibraryManager libraryManager;
     private DatabaseHelper databaseHelper;
@@ -132,8 +143,10 @@ public class DownloadService extends Service {
         
         notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         executorService = Executors.newFixedThreadPool(3); // Máximo 3 downloads simultâneos
-        activeDownloads = new HashMap<>();
-        activeBatchDownloads = new HashMap<>();
+        activeDownloads = new ConcurrentHashMap<>();
+        activeBatchDownloads = new ConcurrentHashMap<>();
+        autoPausedDownloads = new HashSet<>();
+        networkChangeReceiver = new NetworkChangeReceiver();
         
         libraryManager = new GOGLibraryManager(this);
         databaseHelper = new DatabaseHelper(this);
@@ -156,6 +169,10 @@ public class DownloadService extends Service {
         // Retomar downloads pendentes
         resumePendingDownloads();
         
+        // Registrar o receiver de mudança de rede
+        IntentFilter intentFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
+        registerReceiver(networkChangeReceiver, intentFilter);
+
         Log.d(TAG, "DownloadService created");
     }
     
@@ -235,6 +252,13 @@ public class DownloadService extends Service {
         if (databaseHelper != null) {
             databaseHelper.close();
         }
+
+        // Desregistrar o receiver
+        try {
+            unregisterReceiver(networkChangeReceiver);
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "NetworkChangeReceiver was not registered", e);
+        }
         
         Log.d(TAG, "DownloadService destroyed");
     }
@@ -305,24 +329,27 @@ public class DownloadService extends Service {
     private void startBatchDownload(Game game, List<DownloadLink> downloadLinks) {
         Log.d(TAG, "Starting batch download for game: " + game.getTitle() + " with " + downloadLinks.size() + " files");
         
-        // Check if already downloading
         if (activeBatchDownloads.containsKey(game.getId())) {
             Log.w(TAG, "Game is already being downloaded: " + game.getTitle());
             return;
         }
         
-        // Update status in db
         game.setStatus(Game.DownloadStatus.DOWNLOADING);
         databaseHelper.updateGame(game);
+
+        // Serialize links and create batch record
+        String linksJson = DownloadLink.serializeList(downloadLinks);
+        if (linksJson == null) {
+            onDownloadError(game, "Failed to serialize download links.");
+            return;
+        }
+        databaseHelper.createDownloadBatch(game.getId(), downloadLinks.size(), linksJson);
         
-        // Create initial notification
         showBatchDownloadNotification(game, 0, downloadLinks.size(), "Iniciando downloads...");
         
-        // Start as foreground service
         startForeground(NOTIFICATION_ID + (int) game.getId(),
                 createBatchDownloadNotification(game, 0, downloadLinks.size(), "Iniciando downloads..."));
         
-        // Create and start batch download task
         BatchDownloadTask batchTask = new BatchDownloadTask(game, downloadLinks);
         activeBatchDownloads.put(game.getId(), batchTask);
         executorService.execute(batchTask);
@@ -357,21 +384,28 @@ public class DownloadService extends Service {
                     Game game = databaseHelper.getGame(gameId);
                     if (game == null) {
                         Log.w(TAG, "Game not found for ID: " + gameId + ", cleaning up downloads");
-                        // Limpar downloads órfãos
                         for (ContentValues download : gameDownloads) {
                             long downloadId = download.getAsLong("id");
                             databaseHelper.updateDownloadStatus(downloadId, "CANCELLED", "Game not found");
                         }
                         continue;
                     }
-                    
-                    if (gameDownloads.size() == 1) {
-                        // Download único
-                        ContentValues download = gameDownloads.get(0);
-                        resumeSingleDownload(game, download);
+
+                    // Check the status to decide whether to auto-resume
+                    String status = gameDownloads.get(0).getAsString("status");
+                    if ("PAUSED".equals(status)) {
+                        // If it was explicitly paused by the user, do not auto-resume.
+                        // Instead, re-broadcast the paused status to ensure the UI is up-to-date.
+                        Log.d(TAG, "Skipping auto-resume for user-paused download: " + game.getTitle());
+                        onDownloadPaused(game);
                     } else {
-                        // Batch download
-                        resumeBatchDownload(game, gameDownloads);
+                        // If it was PENDING or DOWNLOADING, auto-resume for crash recovery.
+                        Log.d(TAG, "Auto-resuming interrupted download: " + game.getTitle());
+                        if (gameDownloads.size() == 1) {
+                            resumeSingleDownload(game, gameDownloads.get(0));
+                        } else {
+                            resumeBatchDownload(game, gameDownloads);
+                        }
                     }
                 }
                 
@@ -402,26 +436,24 @@ public class DownloadService extends Service {
     }
     
     private void resumeBatchDownload(Game game, List<ContentValues> downloads) {
+        // The 'downloads' list confirms it's a batch, but we get definitive data from the batch table.
         try {
-            List<DownloadLink> downloadLinks = new ArrayList<>();
-            
-            for (ContentValues downloadData : downloads) {
-                String linkId = downloadData.getAsString("link_id");
-                String fileName = downloadData.getAsString("file_name");
-                String downloadUrl = downloadData.getAsString("download_url");
-                
-                DownloadLink downloadLink = new DownloadLink();
-                downloadLink.setId(linkId);
-                downloadLink.setName(fileName);
-                downloadLink.setDownloadUrl(downloadUrl);
-                
-                downloadLinks.add(downloadLink);
+            ContentValues batchData = databaseHelper.getDownloadBatch(game.getId());
+            if (batchData == null) {
+                Log.e(TAG, "Cannot resume batch, no batch data found for game: " + game.getTitle());
+                onDownloadError(game, "Could not find batch data to resume.");
+                return;
             }
-            
-            Log.d(TAG, "Resuming batch download: " + game.getTitle() + " - " + downloadLinks.size() + " files");
-            
-            startBatchDownload(game, downloadLinks);
-            
+            String linksJson = batchData.getAsString("links_json");
+            List<DownloadLink> links = DownloadLink.deserializeList(linksJson);
+
+            if (links != null && !links.isEmpty()) {
+                Log.d(TAG, "Resuming batch download from service startup for: " + game.getTitle());
+                startBatchDownload(game, links);
+            } else {
+                Log.e(TAG, "Failed to resume batch, could not deserialize links for game: " + game.getTitle());
+                onDownloadError(game, "Could not read batch data to resume.");
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error resuming batch download for game: " + game.getTitle(), e);
         }
@@ -433,21 +465,53 @@ public class DownloadService extends Service {
         if (task != null) {
             task.pause();
         }
+
+        BatchDownloadTask batchTask = activeBatchDownloads.get(gameId);
+        if (batchTask != null) {
+            batchTask.pause();
+        }
     }
 
     private void resumeDownload(long gameId) {
-        Log.d(TAG, "Resuming download for game ID: " + gameId);
+        Log.d(TAG, "Attempting to resume download for game ID: " + gameId);
+
+        if (activeDownloads.containsKey(gameId) || activeBatchDownloads.containsKey(gameId)) {
+            Log.w(TAG, "Resume called for an already active download: " + gameId);
+            return;
+        }
+
         Game game = databaseHelper.getGame(gameId);
-        if (game != null) {
-            // To resume, we essentially just start the download again.
-            // The service will pick up the persisted progress.
-            ContentValues downloadData = databaseHelper.getDownload(gameId);
-            if (downloadData != null) {
+        if (game == null) {
+            Log.e(TAG, "Cannot resume download, game not found for ID: " + gameId);
+            return;
+        }
+
+        // Check if it's a batch download
+        ContentValues batchData = databaseHelper.getDownloadBatch(gameId);
+        if (batchData != null) {
+            String linksJson = batchData.getAsString("links_json");
+            List<DownloadLink> links = DownloadLink.deserializeList(linksJson);
+            if (links != null && !links.isEmpty()) {
+                Log.d(TAG, "Resuming batch download for: " + game.getTitle());
+                startBatchDownload(game, links);
+            } else {
+                Log.e(TAG, "Failed to resume batch download, could not deserialize links for game: " + game.getTitle());
+                onDownloadError(game, "Falha ao ler dados do batch para resumir.");
+            }
+        } else {
+            // Check for single download
+            List<ContentValues> downloads = databaseHelper.getDownloadsForGame(gameId);
+            if (downloads.size() == 1) {
+                Log.d(TAG, "Resuming single download for: " + game.getTitle());
+                ContentValues downloadData = downloads.get(0);
                 DownloadLink link = new DownloadLink();
                 link.setId(downloadData.getAsString("link_id"));
                 link.setName(downloadData.getAsString("file_name"));
                 link.setUrl(downloadData.getAsString("download_url"));
+                link.setSize(downloadData.getAsLong("total_bytes"));
                 startDownload(game, link);
+            } else {
+                Log.w(TAG, "No active single or batch download found to resume for game: " + game.getTitle());
             }
         }
     }
@@ -562,6 +626,14 @@ public class DownloadService extends Service {
         }
     }
     
+    private void onDownloadPaused(Game game) {
+        Log.d(TAG, "Broadcasting pause for game: " + game.getTitle());
+        Intent intent = new Intent(ACTION_DOWNLOAD_PROGRESS);
+        intent.putExtra(EXTRA_GAME_ID, game.getId());
+        intent.putExtra(EXTRA_DOWNLOAD_STATUS, Game.DownloadStatus.PAUSED.name());
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+    }
+
     private void onDownloadComplete(Game game, long downloadId, String filePath) {
         Log.d(TAG, "Download completed for game: " + game.getTitle());
         
@@ -719,15 +791,23 @@ public class DownloadService extends Service {
             databaseHelper.updateDownloadStatus(downloadId, "DOWNLOADING", null);
             try {
                 downloadFile();
+
+                // Após o loop, verificar o estado final
+                if (paused) {
+                    Log.d(TAG, "Download paused for game: " + game.getTitle());
+                    databaseHelper.updateDownloadStatus(downloadId, "PAUSED", null);
+                    onDownloadPaused(game);
+                } else if (cancelled) {
+                    Log.d(TAG, "Download cancelled for game: " + game.getTitle());
+                    databaseHelper.updateDownloadStatus(downloadId, "CANCELLED", null);
+                }
+                // Se não foi pausado nem cancelado, onDownloadComplete já foi chamado
+
             } catch (Exception e) {
                 if (!cancelled && !paused) {
                     Log.e(TAG, "Download error", e);
                     onDownloadError(game, e.getMessage());
                     databaseHelper.updateDownloadStatus(downloadId, "FAILED", e.getMessage());
-                } else if (paused) {
-                    databaseHelper.updateDownloadStatus(downloadId, "PAUSED", null);
-                } else {
-                    databaseHelper.updateDownloadStatus(downloadId, "CANCELLED", null);
                 }
             }
         }
@@ -831,7 +911,7 @@ public class DownloadService extends Service {
                 try (InputStream inputStream = response.body().byteStream();
                      OutputStream outputStream = safDownloadManager.getOutputStream(outputFile, downloadedBytes > 0)) {
                     
-                    byte[] buffer = new byte[65536]; // 64KB buffer para melhor performance
+                    byte[] buffer = new byte[262144]; // 256KB buffer para melhor performance
                     int bytesRead;
                     
                     long lastProgressUpdate = System.currentTimeMillis();
@@ -915,13 +995,13 @@ public class DownloadService extends Service {
                      FileOutputStream outputStream = new FileOutputStream(outputFile)) {
                     
                     long bytesDownloaded = 0;
-                    byte[] buffer = new byte[65536]; // 64KB buffer para melhor performance
+                    byte[] buffer = new byte[262144]; // 256KB buffer para melhor performance
                     int bytesRead;
                     
                     long lastProgressUpdate = System.currentTimeMillis();
                     speedMeter.reset(); // Reset do medidor
                     
-                    while ((bytesRead = inputStream.read(buffer)) != -1 && !cancelled) {
+                    while ((bytesRead = inputStream.read(buffer)) != -1 && !cancelled && !paused) {
                         outputStream.write(buffer, 0, bytesRead);
                         bytesDownloaded += bytesRead;
                         
@@ -966,12 +1046,13 @@ public class DownloadService extends Service {
             }
         }
     }
-    
+
     // Classe interna para gerenciar download de múltiplos arquivos
     private class BatchDownloadTask implements Runnable {
         private Game game;
         private List<DownloadLink> downloadLinks;
         private volatile boolean cancelled = false;
+        private volatile boolean paused = false;
         private int currentFileIndex = 0;
         private SpeedMeter speedMeter = new SpeedMeter();
         
@@ -983,9 +1064,24 @@ public class DownloadService extends Service {
         public void cancel() {
             cancelled = true;
         }
+
+        public void pause() {
+            paused = true;
+        }
+
+        public void resume() {
+            paused = false;
+            // A lógica de resumo real será reiniciar a tarefa
+        }
         
         @Override
         public void run() {
+            // Load current progress before starting
+            ContentValues batchData = databaseHelper.getDownloadBatch(game.getId());
+            if (batchData != null) {
+                this.currentFileIndex = batchData.getAsInteger("completed_files");
+            }
+
             try {
                 downloadFiles();
             } catch (Exception e) {
@@ -1006,7 +1102,7 @@ public class DownloadService extends Service {
             
             long totalBytesDownloaded = 0;
             
-            for (int i = 0; i < downloadLinks.size() && !cancelled; i++) {
+            for (int i = 0; i < downloadLinks.size() && !cancelled && !paused; i++) {
                 currentFileIndex = i;
                 DownloadLink currentLink = downloadLinks.get(i);
                 
@@ -1068,6 +1164,13 @@ public class DownloadService extends Service {
                     // Fazer download do arquivo
                     long fileBytesDownloaded = downloadFile(currentLink, totalBytesDownloaded, totalBytesAllFiles);
                     totalBytesDownloaded += fileBytesDownloaded;
+
+                    // Update batch progress after successful file download
+                    ContentValues batch = databaseHelper.getDownloadBatch(game.getId());
+                    if (batch != null) {
+                        long batchId = batch.getAsLong("id");
+                        databaseHelper.updateBatchProgress(batchId, currentFileIndex + 1, "DOWNLOADING");
+                    }
                     
                 } catch (Exception e) {
                     Log.e(TAG, "Error downloading file: " + currentLink.getName(), e);
@@ -1077,7 +1180,15 @@ public class DownloadService extends Service {
                 }
             }
             
-            if (!cancelled) {
+            if (paused) {
+                Log.d(TAG, "Batch download paused for: " + game.getTitle());
+                ContentValues batch = databaseHelper.getDownloadBatch(game.getId());
+                if (batch != null) {
+                    long batchId = batch.getAsLong("id");
+                    databaseHelper.updateBatchProgress(batchId, currentFileIndex, "PAUSED");
+                }
+                onDownloadPaused(game);
+            } else if (!cancelled) {
                 // Todos os downloads concluídos
                 Log.d(TAG, "Batch download completed for: " + game.getTitle());
                 
@@ -1134,7 +1245,7 @@ public class DownloadService extends Service {
                      OutputStream outputStream = safDownloadManager.getOutputStream(outputFile, false)) {
                     
                     long fileBytesDownloaded = 0;
-                    byte[] buffer = new byte[65536]; // 64KB buffer para melhor performance
+                    byte[] buffer = new byte[262144]; // 256KB buffer para melhor performance
                     int bytesRead;
                     
                     long lastProgressUpdate = System.currentTimeMillis();
@@ -1174,6 +1285,45 @@ public class DownloadService extends Service {
                     }
                     throw e;
                 }
+            }
+        }
+    }
+
+    // Receiver para monitorar mudanças na conexão de rede
+    private class NetworkChangeReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            try {
+                ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+                boolean isConnected = activeNetwork != null && activeNetwork.isConnectedOrConnecting();
+
+                if (isConnected) {
+                    Log.d(TAG, "Network connection re-established. Resuming auto-paused downloads.");
+                    // Create a copy to avoid ConcurrentModificationException while iterating
+                    Set<Long> gamesToResume = new HashSet<>(autoPausedDownloads);
+                    for (Long gameId : gamesToResume) {
+                        resumeDownload(gameId);
+                    }
+                    autoPausedDownloads.clear();
+                } else {
+                    Log.d(TAG, "Network connection lost. Pausing all active downloads.");
+                    // Pause all downloads that are not already paused
+                    Set<Long> allActiveIds = new HashSet<>();
+                    allActiveIds.addAll(activeDownloads.keySet());
+                    allActiveIds.addAll(activeBatchDownloads.keySet());
+
+                    for (Long gameId : allActiveIds) {
+                        // Check if the download is actually running before pausing
+                        Game game = databaseHelper.getGame(gameId);
+                        if (game != null && game.getStatus() == Game.DownloadStatus.DOWNLOADING) {
+                             pauseDownload(gameId);
+                             autoPausedDownloads.add(gameId);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error in NetworkChangeReceiver", e);
             }
         }
     }

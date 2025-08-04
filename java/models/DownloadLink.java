@@ -228,4 +228,46 @@ public class DownloadLink implements Serializable {
                 ", size=" + getFormattedSize() +
                 '}';
     }
+
+    public static String serializeList(java.util.List<DownloadLink> links) {
+        try {
+            org.json.JSONArray jsonArray = new org.json.JSONArray();
+            for (DownloadLink link : links) {
+                org.json.JSONObject jsonObject = new org.json.JSONObject();
+                jsonObject.put("id", link.getId());
+                jsonObject.put("name", link.getName());
+                jsonObject.put("url", link.getUrl());
+                jsonObject.put("size", link.getSize());
+                // Não salvamos o fileName pois ele é derivado
+                jsonArray.put(jsonObject);
+            }
+            return jsonArray.toString();
+        } catch (org.json.JSONException e) {
+            // Logar o erro seria ideal aqui
+            return null;
+        }
+    }
+
+    public static java.util.List<DownloadLink> deserializeList(String json) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+        try {
+            java.util.List<DownloadLink> links = new java.util.ArrayList<>();
+            org.json.JSONArray jsonArray = new org.json.JSONArray(json);
+            for (int i = 0; i < jsonArray.length(); i++) {
+                org.json.JSONObject jsonObject = jsonArray.getJSONObject(i);
+                DownloadLink link = new DownloadLink();
+                link.setId(jsonObject.optString("id"));
+                link.setName(jsonObject.optString("name"));
+                link.setUrl(jsonObject.optString("url"));
+                link.setSize(jsonObject.optLong("size"));
+                links.add(link);
+            }
+            return links;
+        } catch (org.json.JSONException e) {
+            // Logar o erro seria ideal aqui
+            return null;
+        }
+    }
 }

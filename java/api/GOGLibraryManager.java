@@ -66,6 +66,46 @@ public class GOGLibraryManager {
         void onError(String error);
     }
     
+    private void executeRequestWithRefresh(Request request, Callback originalCallback) {
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                originalCallback.onFailure(call, e);
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (response.code() == 401) {
+                    // Token expired, try to refresh
+                    GOGAuthManager authManager = new GOGAuthManager(context);
+                    authManager.refreshAccessToken(new GOGAuthManager.AuthCallback() {
+                        @Override
+                        public void onSuccess(String newAuthToken, String newRefreshToken) {
+                            // Refresh successful, retry the original request with the new token
+                            Request newRequest = request.newBuilder()
+                                    .header("Authorization", "Bearer " + newAuthToken)
+                                    .build();
+                            httpClient.newCall(newRequest).enqueue(originalCallback); // Retry with original callback
+                        }
+
+                        @Override
+                        public void onError(String error) {
+                            // Refresh failed, propagate the original 401 error response
+                            try {
+                                originalCallback.onResponse(call, response);
+                            } catch (IOException e) {
+                                onFailure(call, e);
+                            }
+                        }
+                    });
+                } else {
+                    // Not a 401 error, handle as usual
+                    originalCallback.onResponse(call, response);
+                }
+            }
+        });
+    }
+
     /**
      * Carrega a biblioteca do usuário a partir da API real do GOG
      * Tenta api.gog.com primeiro, fallback para embed.gog.com
@@ -100,7 +140,7 @@ public class GOGLibraryManager {
                 .addHeader("Accept", "application/json")
                 .build();
         
-        httpClient.newCall(request).enqueue(new Callback() {
+        executeRequestWithRefresh(request, new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
                 Log.e(TAG, "api.gog.com failed, trying embed.gog.com", e);
@@ -151,7 +191,7 @@ public class GOGLibraryManager {
                 .addHeader("Authorization", "Bearer " + authToken)
                 .build();
         
-        httpClient.newCall(request).enqueue(new Callback() {
+        executeRequestWithRefresh(request, new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
                 Log.e(TAG, "All library endpoints failed", e);
@@ -254,7 +294,7 @@ public class GOGLibraryManager {
                 .addHeader("Accept", "application/json")
                 .build();
 
-        httpClient.newCall(request).enqueue(new Callback() {
+        executeRequestWithRefresh(request, new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
                 Log.e(TAG, "Detailed library loading network error", e);
@@ -423,7 +463,7 @@ public class GOGLibraryManager {
                 .addHeader("Accept", "application/json")
                 .build();
         
-        httpClient.newCall(request).enqueue(new Callback() {
+        executeRequestWithRefresh(request, new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
                 Log.e(TAG, "Game details network error", e);
@@ -609,7 +649,7 @@ public class GOGLibraryManager {
                 .addHeader("Accept", "application/json")
                 .build();
         
-        httpClient.newCall(request).enqueue(new Callback() {
+        executeRequestWithRefresh(request, new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
                 Log.e(TAG, "Download link network error", e);

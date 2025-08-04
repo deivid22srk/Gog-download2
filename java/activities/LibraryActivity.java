@@ -61,6 +61,9 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import android.net.Uri;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import android.widget.ProgressBar;
 
 import org.json.JSONObject;
@@ -113,7 +116,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         initializeManagers(); // Initialize managers first to access preferences
 
         // Check if folders are selected
-        if (!preferencesManager.hasDownloadLocationConfigured() || preferencesManager.getInstallUri() == null) {
+        if (!preferencesManager.hasDownloadLocationConfigured()) {
             Intent intent = new Intent(this, FolderSelectionActivity.class);
             startActivity(intent);
             finish();
@@ -135,7 +138,15 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
             @Override
             public void onReceive(Context context, Intent intent) {
                 long gameId = intent.getLongExtra(DownloadService.EXTRA_GAME_ID, -1);
-                if (gameId != -1) {
+                if (gameId == -1) return;
+
+                String statusStr = intent.getStringExtra(DownloadService.EXTRA_DOWNLOAD_STATUS);
+                if (statusStr != null) {
+                    // Handle status-only updates (like PAUSED)
+                    Game.DownloadStatus status = Game.DownloadStatus.valueOf(statusStr);
+                    gamesAdapter.updateGameStatus(gameId, status);
+                } else {
+                    // Handle regular progress updates
                     gamesAdapter.updateGameProgress(
                         gameId,
                         intent.getLongExtra(DownloadService.EXTRA_BYTES_DOWNLOADED, 0),
@@ -260,7 +271,33 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     private void setupClickListeners() {
         refreshButton.setOnClickListener(v -> refreshLibrary());
         retryButton.setOnClickListener(v -> loadLibrary());
-        installFab.setOnClickListener(v -> showFolderPickerForSource());
+        installFab.setOnClickListener(v -> {
+            android.content.SharedPreferences prefs = getSharedPreferences("TermuxPrefs", MODE_PRIVATE);
+            boolean isFirstRun = prefs.getBoolean("isFirstFabClick", true);
+
+            if (isFirstRun) {
+                // First click: launch Termux and set flag
+                prefs.edit().putBoolean("isFirstFabClick", false).apply();
+
+                Toast.makeText(this, "Iniciando o Termux para configuração inicial. Por favor, aguarde e retorne ao app.", Toast.LENGTH_LONG).show();
+                Intent intent = new Intent();
+                intent.setComponent(new ComponentName("com.termux", "com.termux.app.TermuxActivity"));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                try {
+                    startActivity(intent);
+                    new android.os.Handler().postDelayed(() -> {
+                        Intent returnIntent = new Intent(LibraryActivity.this, LibraryActivity.class);
+                        returnIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                        startActivity(returnIntent);
+                    }, 5000);
+                } catch (Exception e) {
+                    Toast.makeText(this, "Não foi possível abrir o Termux. Verifique se está instalado.", Toast.LENGTH_SHORT).show();
+                }
+            } else {
+                // Subsequent clicks: run normal installation flow
+                showFolderPickerForSource();
+            }
+        });
 
         overlayPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
@@ -291,48 +328,13 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         });
     }
 
-    private void launchTermuxForInstallation() {
-        if (!checkTermuxInstallation()) {
-            return;
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + getPackageName()));
-            overlayPermissionLauncher.launch(intent);
-            return;
-        }
-
-        if (!ensureTermuxIsReady()) {
-            return;
-        }
-
-        String bashPath = getTermuxBashPath();
-        if (bashPath == null) {
-            Toast.makeText(this, "Erro: Não foi possível encontrar o bash do Termux.", Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        Intent intent = new Intent();
-        intent.setClassName("com.termux", "com.termux.app.RunCommandService");
-        intent.setAction("com.termux.RUN_COMMAND");
-        intent.putExtra("com.termux.RUN_COMMAND_PATH", bashPath);
-        intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", "termux-setup-storage"});
-        intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", getTermuxHomeDir());
-        intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
-        
-        try {
-            startService(intent);
-            Toast.makeText(this, "Iniciando configuração do Termux...", Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {
-            Log.e("LibraryActivity", "Failed to start Termux service", e);
-            Toast.makeText(this, "Erro ao iniciar o Termux: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
+    private String getTermuxHomePath() {
+        return "/data/data/com.termux/files/home";
     }
 
     private boolean ensureTermuxIsReady() {
         try {
-            String termuxHomeDir = getTermuxHomeDir();
+            String termuxHomeDir = getTermuxHomePath();
             File termuxConfigDir = new File(termuxHomeDir, ".termux");
             if (!termuxConfigDir.exists()) {
                 if (!termuxConfigDir.mkdirs()) {
@@ -341,17 +343,13 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                     return false;
                 }
             }
-            
+
             File propertiesFile = new File(termuxConfigDir, "termux.properties");
             if (!propertiesFile.exists()) {
                 try (FileWriter writer = new FileWriter(propertiesFile)) {
                     writer.write("allow-external-apps=true\n");
-                    writer.write("bell-character=ignore\n");
-                    writer.write("enforce-char-based-input=true\n");
                 }
             } else {
-                // Verificar se allow-external-apps está configurado
-                // Se não estiver, adicionar
                 String content = readFileContent(propertiesFile);
                 if (!content.contains("allow-external-apps=true")) {
                     try (FileWriter writer = new FileWriter(propertiesFile, true)) {
@@ -371,12 +369,8 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         try {
             PackageInfo packageInfo = getPackageManager().getPackageInfo("com.termux", 0);
             
-            // Verificar se o diretório do Termux existe
-            File termuxHome = new File(getTermuxHomeDir());
-            if (!termuxHome.exists()) {
-                showTermuxNotConfiguredDialog();
-                return false;
-            }
+            // A verificação do diretório home do Termux foi removida porque
+            // não é confiável em versões modernas do Android devido a restrições de armazenamento.
             
             // Verificar se o bash existe
             String bashPath = getTermuxBashPath();
@@ -410,10 +404,6 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         
         Log.e("LibraryActivity", "No valid bash found in any of the expected paths");
         return null;
-    }
-
-    private String getTermuxHomeDir() {
-        return "/data/data/com.termux/files/home";
     }
 
     private String readFileContent(File file) throws IOException {
@@ -544,86 +534,61 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
             .show();
     }
 
-    private void checkAndInstallInnoextract(String sourceDir, String destDir) {
-        // Primeiro verificar se innoextract já está instalado
-        executeTermuxCommand("command -v innoextract", new TermuxCommandCallback() {
-            @Override
-            public void onSuccess() {
-                // innoextract já está instalado, proceder com instalação do jogo
-                Toast.makeText(LibraryActivity.this, "✅ innoextract encontrado! Iniciando instalação...", Toast.LENGTH_SHORT).show();
-                installGameWithInnoextract(sourceDir, destDir);
-            }
-            
-            @Override
-            public void onError() {
-                // innoextract não encontrado, instalar primeiro
-                Toast.makeText(LibraryActivity.this, "📦 Instalando innoextract...", Toast.LENGTH_SHORT).show();
-                installInnoextract(sourceDir, destDir);
-            }
-        });
-    }
-    
-    private void installInnoextract(String sourceDir, String destDir) {
-        // Tentar instalar innoextract via pkg
-        executeTermuxCommand("pkg update -y && pkg install -y innoextract", new TermuxCommandCallback() {
-            @Override
-            public void onSuccess() {
-                Toast.makeText(LibraryActivity.this, "✅ innoextract instalado! Iniciando instalação...", Toast.LENGTH_SHORT).show();
-                installGameWithInnoextract(sourceDir, destDir);
-            }
-            
-            @Override
-            public void onError() {
-                // Falha na instalação, mostrar opções para o usuário
-                showInnoextractInstallationError(sourceDir, destDir);
-            }
-        });
-    }
-    
     private void installGameWithInnoextract(String sourceDir, String destDir) {
-        // Criar comando para instalar o jogo
+        if (!ensureTermuxIsReady()) {
+            Toast.makeText(this, "Não foi possível configurar o Termux. A instalação pode falhar.", Toast.LENGTH_LONG).show();
+            // Continuar mesmo assim, pois o usuário pode ter configurado manualmente.
+        }
+
         String gameInstallScript = createGameInstallScript(sourceDir, destDir);
-        
-        // Salvar script no diretório home do Termux
-        String termuxScriptPath = saveScriptToTermuxHome(gameInstallScript);
+        String termuxScriptPath = saveScriptToAppExternalDir(gameInstallScript);
         if (termuxScriptPath != null) {
-            executeTermuxCommand("bash " + termuxScriptPath, new TermuxCommandCallback() {
-                @Override
-                public void onSuccess() {
-                    Toast.makeText(LibraryActivity.this, "🎉 Instalação concluída com sucesso!", Toast.LENGTH_LONG).show();
-                }
-                
-                @Override
-                public void onError() {
-                    Toast.makeText(LibraryActivity.this, "❌ Erro durante a instalação do jogo.", Toast.LENGTH_LONG).show();
-                }
-            });
+            executeTermuxCommand("bash " + termuxScriptPath);
         }
     }
     
     private String createGameInstallScript(String sourceDir, String destDir) {
         return "#!/data/data/com.termux/files/usr/bin/bash\n" +
                 "echo \"🎮 Iniciando instalação do jogo...\"\n" +
+                "echo \"Script executado em: $(date)\"\n" +
+                "echo \"\"\n" +
+                "echo \"🔄 Verificando dependências (innoextract)...\"\n" +
+                "if ! command -v innoextract &>/dev/null; then\n" +
+                "    echo \"📦 innoextract não encontrado. Tentando instalar via pkg...\"\n" +
+                "    pkg update -y && pkg install -y innoextract\n" +
+                "    if ! command -v innoextract &>/dev/null; then\n" +
+                "        echo \"\"\n" +
+                "        echo \"❌ Falha ao instalar o innoextract. Abortando.\"\n" +
+                "        echo \"💡 Tente instalar manualmente: execute 'pkg install innoextract' no Termux.\"\n" +
+                "        read -p \"Pressione Enter para sair...\"\n" +
+                "        exit 1\n" +
+                "    fi\n" +
+                "fi\n" +
+                "echo \"✅ innoextract está pronto.\"\n" +
                 "\n" +
                 "GOG_DIR=\"" + sourceDir + "\"\n" +
                 "DEST_DIR=\"" + destDir + "\"\n" +
                 "\n" +
                 "# Verificar pasta de origem\n" +
                 "if [ ! -d \"$GOG_DIR\" ]; then\n" +
-                "    echo \"❌ Erro: pasta de origem $GOG_DIR não encontrada.\"\n" +
+                "    echo \"❌ Erro: pasta de origem '$GOG_DIR' não encontrada.\"\n" +
+                "    read -p \"Pressione Enter para sair...\"\n" +
                 "    exit 1\n" +
                 "fi\n" +
                 "\n" +
-                "cd \"$GOG_DIR\" || { echo \"❌ Erro: não foi possível acessar $GOG_DIR.\"; exit 1; }\n" +
+                "cd \"$GOG_DIR\" || { echo \"❌ Erro: não foi possível acessar '$GOG_DIR'.\"; read -p \"Pressione Enter para sair...\"; exit 1; }\n" +
                 "\n" +
                 "# Procurar arquivo setup\n" +
+                "echo \"🔍 Procurando instalador .exe em '$GOG_DIR'...\"\n" +
                 "SETUP_EXE=$(ls setup_*.exe 2>/dev/null | head -n 1)\n" +
                 "if [ ! -f \"$SETUP_EXE\" ]; then\n" +
-                "    echo \"❌ Erro: Instalador .exe não encontrado na pasta.\"\n" +
+                "    echo \"❌ Erro: Nenhum instalador 'setup_*.exe' encontrado na pasta.\"\n" +
                 "    echo \"📁 Arquivos na pasta:\"\n" +
                 "    ls -la\n" +
+                "    read -p \"Pressione Enter para sair...\"\n" +
                 "    exit 1\n" +
                 "fi\n" +
+                "echo \"✅ Instalador encontrado: $SETUP_EXE\"\n" +
                 "\n" +
                 "# Criar pasta de destino se não existir\n" +
                 "mkdir -p \"$DEST_DIR\"\n" +
@@ -635,151 +600,72 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 "    echo \"🎉 Jogo instalado com sucesso!\"\n" +
                 "    echo \"📍 Local: $DEST_DIR\"\n" +
                 "    echo \"\"\n" +
-                "    echo \"📁 Estrutura da instalação:\"\n" +
+                "    echo \"📁 Arquivos extraídos:\"\n" +
                 "    ls -la \"$DEST_DIR\"\n" +
                 "else\n" +
-                "    echo \"❌ Erro durante a extração.\"\n" +
-                "    echo \"💡 Verifique se o arquivo é um instalador GOG válido.\"\n" +
+                "    echo \"❌ Ocorreu um erro durante a extração.\"\n" +
+                "    echo \"💡 Verifique se o arquivo é um instalador GOG válido e se há espaço suficiente.\"\n" +
+                "    read -p \"Pressione Enter para sair...\"\n" +
                 "    exit 1\n" +
-                "fi\n";
+                "fi\n" +
+                "read -p \"Pressione Enter para fechar esta janela...\"\n";
     }
     
-    private String saveScriptToTermuxHome(String scriptContent) {
+    private String saveScriptToAppExternalDir(String scriptContent) {
         try {
-            String termuxHomeDir = getTermuxHomeDir();
-            File termuxHome = new File(termuxHomeDir);
-            
-            // Verificar se o diretório home do Termux existe e é acessível
-            if (!termuxHome.exists() || !termuxHome.canWrite()) {
-                Log.e("LibraryActivity", "Termux home directory not accessible: " + termuxHomeDir);
-                Toast.makeText(this, "❌ Não foi possível acessar o diretório do Termux.", Toast.LENGTH_LONG).show();
+            File externalDir = getExternalFilesDir(null);
+            if (externalDir == null) {
+                Toast.makeText(this, "❌ Não foi possível acessar o armazenamento externo.", Toast.LENGTH_LONG).show();
                 return null;
             }
             
-            File scriptFile = new File(termuxHome, "gog_install.sh");
+            File scriptFile = new File(externalDir, "gog_install.sh");
             FileOutputStream fos = new FileOutputStream(scriptFile);
             fos.write(scriptContent.getBytes());
             fos.close();
             
-            // Dar permissão de execução
-            scriptFile.setExecutable(true);
+            // Set executable for owner, group, and others.
+            scriptFile.setExecutable(true, false);
             
             Log.d("LibraryActivity", "Script saved to: " + scriptFile.getAbsolutePath());
             return scriptFile.getAbsolutePath();
             
         } catch (IOException e) {
-            Log.e("LibraryActivity", "Error saving script to Termux home", e);
+            Log.e("LibraryActivity", "Error saving script to app external dir", e);
             Toast.makeText(this, "❌ Erro ao criar script de instalação.", Toast.LENGTH_LONG).show();
             return null;
         }
     }
     
-    private void executeTermuxCommand(String command, TermuxCommandCallback callback) {
+    private void executeTermuxCommand(String command) {
         if (!checkTermuxInstallation()) {
-            callback.onError();
             return;
         }
-        
+
         String bashPath = getTermuxBashPath();
         if (bashPath == null) {
             showTermuxTroubleshootingDialog();
-            callback.onError();
             return;
         }
-        
+
         Intent intent = new Intent();
         intent.setClassName("com.termux", "com.termux.app.RunCommandService");
         intent.setAction("com.termux.RUN_COMMAND");
         intent.putExtra("com.termux.RUN_COMMAND_PATH", bashPath);
         intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", command});
-        intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", getTermuxHomeDir());
+        File externalDir = getExternalFilesDir(null);
+        String workDir = externalDir != null ? externalDir.getAbsolutePath() : "/sdcard";
+        intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", workDir);
         intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
-        
+
         try {
             startService(intent);
-            Log.d("LibraryActivity", "Executed Termux command: " + command);
-            
-            // Para comandos de verificação, usar timeout menor
-            int timeout = command.contains("command -v") ? 3000 : 10000;
-            
-            new android.os.Handler().postDelayed(() -> {
-                // Verificar se o comando foi bem-sucedido baseado no tipo
-                if (command.contains("command -v innoextract")) {
-                    // Verificar se innoextract realmente existe
-                    File innoextractFile = new File("/data/data/com.termux/files/usr/bin/innoextract");
-                    if (innoextractFile.exists()) {
-                        callback.onSuccess();
-                    } else {
-                        callback.onError();
-                    }
-                } else if (command.contains("pkg install")) {
-                    // Verificar novamente se innoextract foi instalado
-                    File innoextractFile = new File("/data/data/com.termux/files/usr/bin/innoextract");
-                    if (innoextractFile.exists()) {
-                        callback.onSuccess();
-                    } else {
-                        callback.onError();
-                    }
-                } else {
-                    // Para outros comandos, assumir sucesso
-                    callback.onSuccess();
-                }
-            }, timeout);
-            
+            Toast.makeText(this, "Iniciando instalação via Termux... Verifique a notificação.", Toast.LENGTH_LONG).show();
+            Log.d("LibraryActivity", "Started Termux service with command: " + command);
         } catch (Exception e) {
-            Log.e("LibraryActivity", "Failed to execute Termux command", e);
-            callback.onError();
+            Log.e("LibraryActivity", "Failed to start Termux service", e);
+            Toast.makeText(this, "Erro ao iniciar o serviço do Termux: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
-    }
-    
-    private void showInnoextractInstallationError(String sourceDir, String destDir) {
-        new MaterialAlertDialogBuilder(this)
-            .setTitle("❌ Erro na Instalação do innoextract")
-            .setMessage("🚨 **Não foi possível instalar o innoextract automaticamente**\n\n" +
-                    "💡 **Soluções:**\n" +
-                    "1. ✅ Abra o Termux manualmente\n" +
-                    "2. 🔄 Execute: `pkg update && pkg install innoextract`\n" +
-                    "3. 🎮 Tente a instalação novamente\n\n" +
-                    "📱 **Instalação Manual:**\n" +
-                    "• Abra o Termux\n" +
-                    "• Digite: pkg install innoextract\n" +
-                    "• Pressione Enter e aguarde")
-            .setPositiveButton("🚀 Abrir Termux", (dialog, which) -> {
-                try {
-                    Intent intent = getPackageManager().getLaunchIntentForPackage("com.termux");
-                    if (intent != null) {
-                        startActivity(intent);
-                        Toast.makeText(this, "💡 Execute: pkg install innoextract", Toast.LENGTH_LONG).show();
-                    }
-                } catch (Exception e) {
-                    Toast.makeText(this, "Erro ao abrir Termux", Toast.LENGTH_SHORT).show();
-                }
-            })
-            .setNeutralButton("🔄 Tentar Novamente", (dialog, which) -> {
-                checkAndInstallInnoextract(sourceDir, destDir);
-            })
-            .setNegativeButton("Cancelar", null)
-            .show();
-    }
-    
-    // Método para testar manualmente se innoextract existe
-    private void testInnoextractAvailability() {
-        executeTermuxCommand("command -v innoextract && echo 'innoextract encontrado!' || echo 'innoextract não encontrado'", new TermuxCommandCallback() {
-            @Override
-            public void onSuccess() {
-                Toast.makeText(LibraryActivity.this, "✅ innoextract está disponível!", Toast.LENGTH_SHORT).show();
-            }
-            
-            @Override
-            public void onError() {
-                Toast.makeText(LibraryActivity.this, "❌ innoextract não encontrado", Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-    
-    interface TermuxCommandCallback {
-        void onSuccess();
-        void onError();
     }
     
     private void checkPermissions() {
@@ -1326,7 +1212,8 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         Log.d("LibraryActivity", "Starting multiple downloads for: " + game.getTitle() + " - " + selectedLinks.size() + " files");
         
         // Criar batch de download no banco de dados
-        long batchId = databaseHelper.createDownloadBatch(game.getId(), selectedLinks.size());
+        String linksJson = DownloadLink.serializeList(new ArrayList<>(selectedLinks));
+        long batchId = databaseHelper.createDownloadBatch(game.getId(), selectedLinks.size(), linksJson);
         
         // Inserir cada download individual no banco
         for (DownloadLink link : selectedLinks) {
@@ -1478,8 +1365,8 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                     }
                 }
                 if (!sourceFiles.isEmpty()) {
-                    // Verificar e instalar innoextract, depois instalar o jogo
-                    checkAndInstallInnoextract(sourceFolderPath, destinationFolderPath);
+                    // Inicia a instalação do jogo usando o Termux
+                    installGameWithInnoextract(sourceFolderPath, destinationFolderPath);
                 } else {
                     Toast.makeText(this, "Nenhum arquivo .exe encontrado na pasta de origem.", Toast.LENGTH_SHORT).show();
                 }
