@@ -1,50 +1,163 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="24dp"
-    tools:context=".activities.FolderSelectionActivity">
+    android:fillViewport="true">
 
-    <com.google.android.material.textview.MaterialTextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Configure suas pastas"
-        android:textAppearance="?attr/textAppearanceHeadline5"
-        android:layout_marginBottom="16dp" />
-
-    <com.google.android.material.textview.MaterialTextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Antes de continuar, por favor, conceda as permissões necessárias e selecione a pasta para salvar os downloads."
-        android:textAppearance="?attr/textAppearanceBody1"
-        android:gravity="center"
-        android:layout_marginBottom="32dp" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/selectDownloadFolderButton"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Selecionar Pasta de Downloads"
-        style="@style/Widget.Material3.Button.OutlinedButton"
-        android:layout_marginBottom="8dp" />
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:padding="24dp"
+        tools:context=".activities.FolderSelectionActivity">
 
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/downloadFolderPath"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Nenhuma pasta selecionada"
-        android:textAppearance="?attr/textAppearanceCaption"
-        android:layout_marginBottom="32dp" />
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Configuração Inicial"
+            android:textAppearance="?attr/textAppearanceHeadline5"
+            android:layout_marginBottom="16dp" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/continueButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Continuar"
-        android:enabled="false" />
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Para o aplicativo funcionar corretamente, precisamos de algumas permissões e da seleção de uma pasta."
+            android:textAppearance="?attr/textAppearanceBody1"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
 
-</LinearLayout>
+        <!-- Passo 1: Pasta de Download -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorPrimaryContainer"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="1. Pasta de Downloads"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/selectDownloadFolderButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Selecionar Pasta" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/downloadFolderPath"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Nenhuma pasta selecionada"
+                    android:textAppearance="?attr/textAppearanceCaption" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Passo 2: Permissões -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorPrimaryContainer"
+            android:layout_marginBottom="24dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="2. Permissões Necessárias"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    android:layout_marginBottom="12dp"/>
+
+                <!-- Permissão de Armazenamento -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp">
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/requestStorageButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@+id/statusStorage"
+                        android:text="Permissão de Armazenamento"
+                        style="@style/Widget.Material3.Button.OutlinedButton"/>
+                    <ImageView
+                        android:id="@+id/statusStorage"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:layout_marginStart="8dp"/>
+                </RelativeLayout>
+
+                <!-- Permissão de Notificação -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp">
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/requestNotificationButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@+id/statusNotification"
+                        android:text="Permissão de Notificação"
+                        style="@style/Widget.Material3.Button.OutlinedButton"/>
+                    <ImageView
+                        android:id="@+id/statusNotification"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:layout_marginStart="8dp"/>
+                </RelativeLayout>
+
+                <!-- Permissão de Sobreposição -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/requestOverlayButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@+id/statusOverlay"
+                        android:text="Permissão de Sobreposição"
+                        style="@style/Widget.Material3.Button.OutlinedButton"/>
+                    <ImageView
+                        android:id="@+id/statusOverlay"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:layout_marginStart="8dp"/>
+                </RelativeLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Botão Continuar -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/continueButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Continuar"
+            android:enabled="false" />
+
+    </LinearLayout>
+</ScrollView>

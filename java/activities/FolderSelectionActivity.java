@@ -38,12 +38,13 @@ import com.termux.utils.PermissionHelper;
 public class FolderSelectionActivity extends BaseActivity {
 
     private Button selectDownloadFolderButton;
+    private Button requestStorageButton, requestNotificationButton, requestOverlayButton;
+    private ImageView statusStorage, statusNotification, statusOverlay;
     private PermissionHelper permissionHelper;
     private ActivityResultLauncher<Intent> overlayPermissionLauncher;
     private ActivityResultLauncher<Intent> storagePermissionLauncher;
     private Button continueButton;
     private TextView downloadFolderPath;
-    private TextView installFolderPath;
 
     private PreferencesManager preferencesManager;
 
@@ -71,29 +72,20 @@ public class FolderSelectionActivity extends BaseActivity {
         setContentView(R.layout.activity_folder_selection);
 
         preferencesManager = new PreferencesManager(this);
-
-        selectDownloadFolderButton = findViewById(R.id.selectDownloadFolderButton);
-        continueButton = findViewById(R.id.continueButton);
-        downloadFolderPath = findViewById(R.id.downloadFolderPath);
-
-        selectDownloadFolderButton.setOnClickListener(v -> openFolderPicker(downloadFolderPickerLauncher));
-
-        continueButton.setOnClickListener(v -> {
-            Intent intent = new Intent(FolderSelectionActivity.this, LibraryActivity.class);
-            startActivity(intent);
-            finish();
-        });
-
         permissionHelper = new PermissionHelper(this);
+
+        initializeViews();
         initializeLaunchers();
+        setupClickListeners();
+
         loadExistingPreferences();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // Every time the user returns to the screen, check if permissions are still granted
-        checkAndRequestPermissions();
+        // Every time the user returns to the screen, update the UI
+        updateUI();
     }
 
     private void initializeLaunchers() {
@@ -112,35 +104,61 @@ public class FolderSelectionActivity extends BaseActivity {
             });
     }
 
-    private void checkAndRequestPermissions() {
-        // Sequentially check for permissions.
+    private void initializeViews() {
+        selectDownloadFolderButton = findViewById(R.id.selectDownloadFolderButton);
+        continueButton = findViewById(R.id.continueButton);
+        downloadFolderPath = findViewById(R.id.downloadFolderPath);
 
-        // 1. Standard Permissions (can be grouped)
-        java.util.List<String> standardPermsNeeded = new java.util.ArrayList<>();
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                standardPermsNeeded.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-            }
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                standardPermsNeeded.add(Manifest.permission.POST_NOTIFICATIONS);
-            }
-        }
+        requestStorageButton = findViewById(R.id.requestStorageButton);
+        requestNotificationButton = findViewById(R.id.requestNotificationButton);
+        requestOverlayButton = findViewById(R.id.requestOverlayButton);
 
-        if (!standardPermsNeeded.isEmpty()) {
-            Log.d("FolderSelectionActivity", "Requesting standard permissions...");
-            permissionHelper.requestPermissions(standardPermsNeeded.toArray(new String[0]), granted -> {
-                // After the user responds, re-check the whole chain.
-                checkAndRequestPermissions();
-            });
-            return; // Stop here and wait for the callback.
-        }
+        statusStorage = findViewById(R.id.statusStorage);
+        statusNotification = findViewById(R.id.statusNotification);
+        statusOverlay = findViewById(R.id.statusOverlay);
+    }
 
-        // 2. Special Permission: All Files Access (Android 11+)
+    private void setupClickListeners() {
+        selectDownloadFolderButton.setOnClickListener(v -> openFolderPicker(downloadFolderPickerLauncher));
+
+        continueButton.setOnClickListener(v -> {
+            Intent intent = new Intent(FolderSelectionActivity.this, LibraryActivity.class);
+            startActivity(intent);
+            finish();
+        });
+
+        requestStorageButton.setOnClickListener(v -> requestStoragePermission());
+        requestNotificationButton.setOnClickListener(v -> requestNotificationPermission());
+        requestOverlayButton.setOnClickListener(v -> requestOverlayPermission());
+    }
+
+    private void updateUI() {
+        // Update permission status icons and button states
+        updatePermissionStatus(statusStorage, hasStoragePermission(), requestStorageButton);
+        updatePermissionStatus(statusNotification, hasNotificationPermission(), requestNotificationButton);
+        updatePermissionStatus(statusOverlay, hasOverlayPermission(), requestOverlayButton);
+
+        // Check if the continue button can be enabled
+        checkContinueButtonState();
+    }
+
+    private void updatePermissionStatus(ImageView statusView, boolean granted, Button button) {
+        if (granted) {
+            statusView.setImageResource(android.R.drawable.checkbox_on_background);
+            // Using theme color for success state
+            statusView.setColorFilter(com.google.android.material.R.attr.colorPrimary);
+            button.setEnabled(false);
+        } else {
+            statusView.setImageResource(R.drawable.ic_error);
+            // Using theme color for error state
+            statusView.setColorFilter(com.google.android.material.R.attr.colorError);
+            button.setEnabled(true);
+        }
+    }
+
+    private void requestStoragePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
-                Log.d("FolderSelectionActivity", "Requesting All Files Access...");
                 try {
                     Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                         Uri.parse("package:" + getPackageName()));
@@ -149,24 +167,30 @@ public class FolderSelectionActivity extends BaseActivity {
                     Log.e("FolderSelectionActivity", "Failed to launch storage settings", e);
                     Toast.makeText(this, "Falha ao abrir configurações de armazenamento.", Toast.LENGTH_SHORT).show();
                 }
-                return; // Stop here and wait for the user to return from settings.
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                permissionHelper.requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, granted -> updateUI());
             }
         }
+    }
 
-        // 3. Special Permission: Draw Over Other Apps
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                permissionHelper.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, granted -> updateUI());
+            }
+        }
+    }
+
+    private void requestOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (!Settings.canDrawOverlays(this)) {
-                Log.d("FolderSelectionActivity", "Requesting Overlay permission...");
                 Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:" + getPackageName()));
                 overlayPermissionLauncher.launch(intent);
-                return; // Stop here and wait.
             }
         }
-
-        // If we reach here, all permissions have been granted.
-        Log.d("FolderSelectionActivity", "All permissions granted.");
-        checkContinueButtonState();
     }
 
     // Helper methods to check permissions state for the continue button
