@@ -1,11 +1,11 @@
-package com.example.gogdownloader.api;
+package com.termux.api;
 
 import android.content.Context;
 import android.util.Log;
 
-import com.example.gogdownloader.models.DownloadLink;
-import com.example.gogdownloader.models.Game;
-import com.example.gogdownloader.utils.PreferencesManager;
+import com.termux.models.DownloadLink;
+import com.termux.models.Game;
+import com.termux.utils.PreferencesManager;
 
 import org.json.JSONArray;
 import org.json.JSONException;

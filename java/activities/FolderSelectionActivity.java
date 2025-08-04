@@ -1,4 +1,4 @@
-package com.example.gogdownloader.activities;
+package com.termux.activities;
 
 import android.content.Intent;
 import android.net.Uri;
@@ -11,8 +11,8 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.example.gogdownloader.R;
-import com.example.gogdownloader.utils.PreferencesManager;
+import com.termux.R;
+import com.termux.utils.PreferencesManager;
 
 public class FolderSelectionActivity extends BaseActivity {
 

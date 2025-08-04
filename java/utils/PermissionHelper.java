@@ -1,4 +1,4 @@
-package com.example.gogdownloader.utils;
+package com.termux.utils;
 
 import android.Manifest;
 import android.app.Activity;
@@ -197,5 +197,10 @@ public class PermissionHelper {
         
         this.currentCallback = callback;
         permissionLauncher.launch(allPermissions.toArray(new String[0]));
+    }
+
+    public void requestPermissions(String[] permissions, PermissionCallback callback) {
+        this.currentCallback = callback;
+        permissionLauncher.launch(permissions);
     }
 }

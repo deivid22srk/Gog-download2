@@ -1,4 +1,4 @@
-package com.example.gogdownloader.utils;
+package com.termux.utils;
 
 import android.content.Context;
 import android.util.Log;

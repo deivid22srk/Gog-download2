@@ -1,4 +1,4 @@
-package com.example.gogdownloader.models;
+package com.termux.models;
 
 import org.json.JSONException;
 import org.json.JSONObject;

@@ -1,4 +1,4 @@
-package com.example.gogdownloader.services;
+package com.termux.services;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -16,10 +16,10 @@ import androidx.core.app.NotificationCompat;
 import androidx.documentfile.provider.DocumentFile;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import com.example.gogdownloader.R;
-import com.example.gogdownloader.activities.LibraryActivity;
-import com.example.gogdownloader.utils.PreferencesManager;
-import com.example.gogdownloader.utils.SAFDownloadManager;
+import com.termux.R;
+import com.termux.activities.LibraryActivity;
+import com.termux.utils.PreferencesManager;
+import com.termux.utils.SAFDownloadManager;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,8 +33,8 @@ public class InstallationService extends Service {
 
     private static final String TAG = "InstallationService";
 
-    public static final String ACTION_INSTALL = "com.example.gogdownloader.INSTALL";
-    public static final String ACTION_INSTALL_PROGRESS = "com.example.gogdownloader.INSTALL_PROGRESS";
+    public static final String ACTION_INSTALL = "com.termux.INSTALL";
+    public static final String ACTION_INSTALL_PROGRESS = "com.termux.INSTALL_PROGRESS";
 
     public static final String EXTRA_INSTALLER_FOLDER_URI = "extra_installer_folder_uri";
     public static final String EXTRA_INSTALL_PROGRESS = "extra_install_progress";
@@ -120,7 +120,7 @@ public class InstallationService extends Service {
 
                 binFiles.add(0, setupFile); // Process setup file first
 
-                DocumentFile installDir = safDownloadManager.getInstallDirectory();
+                DocumentFile installDir = safDownloadManager.getDownloadDirectory();
                 if (installDir == null) {
                     throw new IOException("Installation directory not configured.");
                 }

@@ -1,4 +1,4 @@
-package com.example.gogdownloader.adapters;
+package com.termux.adapters;
 
 import android.content.Context;
 import android.view.LayoutInflater;
@@ -13,9 +13,9 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.example.gogdownloader.R;
-import com.example.gogdownloader.models.Game;
-import com.example.gogdownloader.utils.ImageLoader;
+import com.termux.R;
+import com.termux.models.Game;
+import com.termux.utils.ImageLoader;
 
 import java.util.ArrayList;
 import java.util.List;

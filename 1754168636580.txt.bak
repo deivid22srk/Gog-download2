@@ -8,7 +8,7 @@ Intent intent = new Intent(); intent.setComponent(new ComponentName("com.termux"
 Mais tem um porém vamos ter que mudar o nome de pacote no meu app para: com.termux consequentemente teremos que alterar todos os arquivos Java para esse novo nome de pacote
 
 
-Já que agora eu fiz a integração do Termux no nosso por exemplo agora talvez podemos fazer a instalação dos jogos .bin instalando [pkg install innoextract] clicando no botão FAB lá onde mostra as biblioteca dos jogos do usuário 
+Já que agora eu fiz a integração do Termux no nosso por exemplo agora talvez podemos fazer a instalação dos jogos .bin instalando [pkg install innoextract]
 
 Exemplo de como iniciar o Termux diretamente no nosso app:
 

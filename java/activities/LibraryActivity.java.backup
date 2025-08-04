@@ -545,47 +545,247 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     }
 
     private void checkAndInstallInnoextract(String sourceDir, String destDir) {
-        // Primeiro verificar se innoextract já está instalado
-        executeTermuxCommand("command -v innoextract", new TermuxCommandCallback() {
+        // Primeiro inicializar o ambiente Termux completamente
+        initializeTermuxEnvironment(new TermuxCommandCallback() {
             @Override
             public void onSuccess() {
-                // innoextract já está instalado, proceder com instalação do jogo
-                Toast.makeText(LibraryActivity.this, "✅ innoextract encontrado! Iniciando instalação...", Toast.LENGTH_SHORT).show();
-                installGameWithInnoextract(sourceDir, destDir);
+                // Ambiente inicializado, verificar se innoextract existe
+                executeTermuxCommandWithEnv("command -v innoextract", new TermuxCommandCallback() {
+                    @Override
+                    public void onSuccess() {
+                        // innoextract já está instalado, proceder com instalação do jogo
+                        Toast.makeText(LibraryActivity.this, "✅ innoextract encontrado! Iniciando instalação...", Toast.LENGTH_SHORT).show();
+                        installGameWithInnoextract(sourceDir, destDir);
+                    }
+                    
+                    @Override
+                    public void onError() {
+                        // innoextract não encontrado, instalar primeiro
+                        Toast.makeText(LibraryActivity.this, "📦 Instalando innoextract...", Toast.LENGTH_SHORT).show();
+                        installInnoextract(sourceDir, destDir);
+                    }
+                });
             }
             
             @Override
             public void onError() {
-                // innoextract não encontrado, instalar primeiro
-                Toast.makeText(LibraryActivity.this, "📦 Instalando innoextract...", Toast.LENGTH_SHORT).show();
-                installInnoextract(sourceDir, destDir);
+                showTermuxInitializationError();
             }
         });
+    }
+    
+    private void initializeTermuxEnvironment(TermuxCommandCallback callback) {
+        // Criar e executar script de inicialização do ambiente Termux
+        String initScript = createTermuxInitScript();
+        String scriptPath = saveScriptToTermuxHome(initScript, "termux_init.sh");
+        
+        if (scriptPath != null) {
+            executeTermuxCommand("bash " + scriptPath, callback);
+        } else {
+            callback.onError();
+        }
+    }
+    
+    private String createTermuxInitScript() {
+        return "#!/data/data/com.termux/files/usr/bin/bash\n" +
+                "\n" +
+                "# Configuração completa do ambiente Termux\n" +
+                "echo '🚀 Inicializando ambiente Termux...'\n" +
+                "\n" +
+                "# Configurar variáveis de ambiente essenciais\n" +
+                "export TERMUX_PREFIX=/data/data/com.termux/files/usr\n" +
+                "export HOME=/data/data/com.termux/files/home\n" +
+                "export PATH=$TERMUX_PREFIX/bin:$PATH\n" +
+                "export LD_LIBRARY_PATH=$TERMUX_PREFIX/lib:$LD_LIBRARY_PATH\n" +
+                "export PKG_CONFIG_PATH=$TERMUX_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH\n" +
+                "\n" +
+                "# Configurar locales\n" +
+                "export LANG=en_US.UTF-8\n" +
+                "export LC_ALL=en_US.UTF-8\n" +
+                "\n" +
+                "# Configurar diretórios importantes\n" +
+                "export TMPDIR=$TERMUX_PREFIX/tmp\n" +
+                "export ANDROID_DATA=/data\n" +
+                "export ANDROID_ROOT=/system\n" +
+                "\n" +
+                "# Configurar variáveis adicionais que podem ser necessárias\n" +
+                "export SHELL=$TERMUX_PREFIX/bin/bash\n" +
+                "export TERM=xterm-256color\n" +
+                "export COLORTERM=truecolor\n" +
+                "\n" +
+                "# Criar diretórios necessários se não existirem\n" +
+                "mkdir -p $HOME/.termux\n" +
+                "mkdir -p $TERMUX_PREFIX/tmp\n" +
+                "mkdir -p $TERMUX_PREFIX/var/lib/dpkg\n" +
+                "mkdir -p $TERMUX_PREFIX/var/cache/apt\n" +
+                "\n" +
+                "# Verificar se os binários essenciais existem\n" +
+                "echo '🔍 Verificando binários essenciais...'\n" +
+                "if [ ! -f $TERMUX_PREFIX/bin/pkg ]; then\n" +
+                "    echo '❌ Erro: pkg não encontrado em $TERMUX_PREFIX/bin/'\n" +
+                "    echo '💡 O Termux pode não estar completamente instalado'\n" +
+                "    exit 1\n" +
+                "fi\n" +
+                "\n" +
+                "if [ ! -f $TERMUX_PREFIX/bin/apt ]; then\n" +
+                "    echo '❌ Erro: apt não encontrado em $TERMUX_PREFIX/bin/'\n" +
+                "    echo '💡 O Termux pode não estar completamente instalado'\n" +
+                "    exit 1\n" +
+                "fi\n" +
+                "\n" +
+                "# Garantir que o bash esteja configurado corretamente\n" +
+                "echo '🔧 Configurando bash...'\n" +
+                "if [ -f $TERMUX_PREFIX/etc/bash.bashrc ]; then\n" +
+                "    echo '📜 Carregando bash.bashrc...'\n" +
+                "    source $TERMUX_PREFIX/etc/bash.bashrc 2>/dev/null || true\n" +
+                "else\n" +
+                "    echo '⚠️ bash.bashrc não encontrado, continuando...'\n" +
+                "fi\n" +
+                "\n" +
+                "# Tentar executar dpkg --configure para garantir que apt esteja configurado\n" +
+                "echo '⚙️ Verificando configuração do apt/dpkg...'\n" +
+                "if [ -f $TERMUX_PREFIX/bin/dpkg ]; then\n" +
+                "    $TERMUX_PREFIX/bin/dpkg --configure -a 2>/dev/null || true\n" +
+                "fi\n" +
+                "\n" +
+                "# Testar se pkg funciona\n" +
+                "echo '🧪 Testando comando pkg...'\n" +
+                "if ! $TERMUX_PREFIX/bin/pkg --version >/dev/null 2>&1; then\n" +
+                "    echo '❌ Erro: comando pkg não está funcionando'\n" +
+                "    echo '💡 Tentando diferentes abordagens...'\n" +
+                "    \n" +
+                "    # Tentar com caminho absoluto\n" +
+                "    if ! /data/data/com.termux/files/usr/bin/pkg --version >/dev/null 2>&1; then\n" +
+                "        echo '❌ Falha na inicialização do pkg'\n" +
+                "        echo '📋 Informações de debug:'\n" +
+                "        echo 'PATH atual: '$PATH\n" +
+                "        echo 'TERMUX_PREFIX: '$TERMUX_PREFIX\n" +
+                "        echo 'Conteúdo do diretório bin:'\n" +
+                "        ls -la $TERMUX_PREFIX/bin/ 2>/dev/null || echo 'Erro ao listar bin/'\n" +
+                "        exit 1\n" +
+                "    fi\n" +
+                "fi\n" +
+                "\n" +
+                "# Teste final com apt\n" +
+                "echo '🧪 Testando comando apt...'\n" +
+                "$TERMUX_PREFIX/bin/apt --version >/dev/null 2>&1 || echo '⚠️ Aviso: apt pode ter problemas'\n" +
+                "\n" +
+                "echo '✅ Ambiente Termux inicializado com sucesso!'\n" +
+                "echo 'PATH=$PATH'\n" +
+                "echo 'TERMUX_PREFIX=$TERMUX_PREFIX'\n" +
+                "echo 'HOME=$HOME'\n";
     }
     
     private void installInnoextract(String sourceDir, String destDir) {
-        // Tentar instalar innoextract via pkg
-        executeTermuxCommand("pkg update -y && pkg install -y innoextract", new TermuxCommandCallback() {
-            @Override
-            public void onSuccess() {
-                Toast.makeText(LibraryActivity.this, "✅ innoextract instalado! Iniciando instalação...", Toast.LENGTH_SHORT).show();
-                installGameWithInnoextract(sourceDir, destDir);
-            }
+        // Versão simplificada de instalação do innoextract
+    private void installInnoextractSimple(String sourceDir, String destDir) {
+        String simpleInstallScript = 
+            "#!/data/data/com.termux/files/usr/bin/bash\n" +
+            "\n" +
+            "# Configurar ambiente\n" +
+            "export TERMUX_PREFIX=/data/data/com.termux/files/usr\n" +
+            "export HOME=/data/data/com.termux/files/home\n" +
+            "export PATH=$TERMUX_PREFIX/bin:$PATH\n" +
+            "\n" +
+            "echo '📦 Instalando innoextract...'\n" +
+            "\n" +
+            "# Tentar com pkg no PATH\n" +
+            "if command -v pkg >/dev/null 2>&1; then\n" +
+            "    pkg update -y && pkg install -y innoextract\n" +
+            "# Tentar com caminho absoluto\n" +
+            "elif [ -f $TERMUX_PREFIX/bin/pkg ]; then\n" +
+            "    $TERMUX_PREFIX/bin/pkg update -y && $TERMUX_PREFIX/bin/pkg install -y innoextract\n" +
+            "else\n" +
+            "    echo 'Erro: pkg não encontrado'\n" +
+            "    exit 1\n" +
+            "fi\n";
             
-            @Override
-            public void onError() {
-                // Falha na instalação, mostrar opções para o usuário
-                showInnoextractInstallationError(sourceDir, destDir);
-            }
-        });
+        String scriptPath = saveScriptToTermuxHome(simpleInstallScript, "simple_innoextract_install.sh");
+        
+        if (scriptPath != null) {
+            executeTermuxCommand("bash " + scriptPath, new TermuxCommandCallback() {
+                @Override
+                public void onSuccess() {
+                    Toast.makeText(LibraryActivity.this, "✅ innoextract instalado! Iniciando instalação...", Toast.LENGTH_SHORT).show();
+                    installGameWithInnoextract(sourceDir, destDir);
+                }
+                
+                @Override
+                public void onError() {
+                    showInnoextractInstallationError(sourceDir, destDir);
+                }
+            });
+        } else {
+            showInnoextractInstallationError(sourceDir, destDir);
+        }
+    }
+    }
+    
+    private void executeTermuxCommandWithEnv(String command, TermuxCommandCallback callback) {
+        // Criar script que configura ambiente e executa comando
+        String envScript = createEnvCommandScript(command);
+        String scriptPath = saveScriptToTermuxHome(envScript, "env_command.sh");
+        
+        if (scriptPath != null) {
+            executeTermuxCommand("bash " + scriptPath, callback);
+        } else {
+            callback.onError();
+        }
+    }
+    
+    private String createEnvCommandScript(String command) {
+        return "#!/data/data/com.termux/files/usr/bin/bash\n" +
+                "\n" +
+                "# Configurar ambiente Termux completo\n" +
+                "export TERMUX_PREFIX=/data/data/com.termux/files/usr\n" +
+                "export HOME=/data/data/com.termux/files/home\n" +
+                "export PATH=$TERMUX_PREFIX/bin:$PATH\n" +
+                "export LD_LIBRARY_PATH=$TERMUX_PREFIX/lib:$LD_LIBRARY_PATH\n" +
+                "export PKG_CONFIG_PATH=$TERMUX_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH\n" +
+                "export LANG=en_US.UTF-8\n" +
+                "export LC_ALL=en_US.UTF-8\n" +
+                "export TMPDIR=$TERMUX_PREFIX/tmp\n" +
+                "export ANDROID_DATA=/data\n" +
+                "export ANDROID_ROOT=/system\n" +
+                "export SHELL=$TERMUX_PREFIX/bin/bash\n" +
+                "export TERM=xterm-256color\n" +
+                "\n" +
+                "# Garantir que diretórios existam\n" +
+                "mkdir -p $TERMUX_PREFIX/tmp\n" +
+                "mkdir -p $TERMUX_PREFIX/var/lib/dpkg\n" +
+                "mkdir -p $TERMUX_PREFIX/var/cache/apt\n" +
+                "\n" +
+                "# Source do ambiente bash se existir\n" +
+                "[ -f $TERMUX_PREFIX/etc/bash.bashrc ] && source $TERMUX_PREFIX/etc/bash.bashrc 2>/dev/null\n" +
+                "\n" +
+                "# Configurar dpkg se necessário\n" +
+                "[ -f $TERMUX_PREFIX/bin/dpkg ] && $TERMUX_PREFIX/bin/dpkg --configure -a 2>/dev/null || true\n" +
+                "\n" +
+                "# Verificar se o comando pkg funciona antes de executar\n" +
+                "if [[ \"" + command + "\" == *\"pkg\"* ]]; then\n" +
+                "    echo '🔍 Verificando se pkg funciona...'\n" +
+                "    if ! $TERMUX_PREFIX/bin/pkg --version >/dev/null 2>&1; then\n" +
+                "        echo '❌ pkg não funciona, tentando usar caminhos absolutos...'\n" +
+                "        # Executar comando com caminho absoluto em vez de sed\n" +
+                "        FIXED_COMMAND=\"$(echo '" + command + "' | sed 's/pkg /$TERMUX_PREFIX\\/bin\\/pkg /g')\"\n" +
+                "        echo '🔧 Comando modificado: '$FIXED_COMMAND\n" +
+                "        eval \"$FIXED_COMMAND\"\n" +
+                "        exit $?\n" +
+                "    fi\n" +
+                "fi\n" +
+                "\n" +
+                "# Executar comando com ambiente configurado\n" +
+                "echo '📄 Executando: " + command + "'\n" +
+                "echo '🛤️ PATH: '$PATH\n" +
+                command + "\n";
     }
     
     private void installGameWithInnoextract(String sourceDir, String destDir) {
-        // Criar comando para instalar o jogo
+        // Criar comando para instalar o jogo com ambiente configurado
         String gameInstallScript = createGameInstallScript(sourceDir, destDir);
         
         // Salvar script no diretório home do Termux
-        String termuxScriptPath = saveScriptToTermuxHome(gameInstallScript);
+        String termuxScriptPath = saveScriptToTermuxHome(gameInstallScript, "gog_install.sh");
         if (termuxScriptPath != null) {
             executeTermuxCommand("bash " + termuxScriptPath, new TermuxCommandCallback() {
                 @Override
@@ -603,6 +803,22 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     
     private String createGameInstallScript(String sourceDir, String destDir) {
         return "#!/data/data/com.termux/files/usr/bin/bash\n" +
+                "\n" +
+                "# Configurar ambiente Termux completo\n" +
+                "export TERMUX_PREFIX=/data/data/com.termux/files/usr\n" +
+                "export HOME=/data/data/com.termux/files/home\n" +
+                "export PATH=$TERMUX_PREFIX/bin:$PATH\n" +
+                "export LD_LIBRARY_PATH=$TERMUX_PREFIX/lib:$LD_LIBRARY_PATH\n" +
+                "export PKG_CONFIG_PATH=$TERMUX_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH\n" +
+                "export LANG=en_US.UTF-8\n" +
+                "export LC_ALL=en_US.UTF-8\n" +
+                "export TMPDIR=$TERMUX_PREFIX/tmp\n" +
+                "export ANDROID_DATA=/data\n" +
+                "export ANDROID_ROOT=/system\n" +
+                "\n" +
+                "# Source do ambiente bash se existir\n" +
+                "[ -f $TERMUX_PREFIX/etc/bash.bashrc ] && source $TERMUX_PREFIX/etc/bash.bashrc\n" +
+                "\n" +
                 "echo \"🎮 Iniciando instalação do jogo...\"\n" +
                 "\n" +
                 "GOG_DIR=\"" + sourceDir + "\"\n" +
@@ -629,7 +845,16 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 "mkdir -p \"$DEST_DIR\"\n" +
                 "\n" +
                 "echo \"📂 Extraindo $SETUP_EXE para $DEST_DIR...\"\n" +
-                "innoextract --output-dir=\"$DEST_DIR\" \"$SETUP_EXE\"\n" +
+                "\n" +
+                "# Usar innoextract com ambiente configurado\n" +
+                "if command -v innoextract >/dev/null 2>&1; then\n" +
+                "    innoextract --output-dir=\"$DEST_DIR\" \"$SETUP_EXE\"\n" +
+                "elif [ -f $TERMUX_PREFIX/bin/innoextract ]; then\n" +
+                "    $TERMUX_PREFIX/bin/innoextract --output-dir=\"$DEST_DIR\" \"$SETUP_EXE\"\n" +
+                "else\n" +
+                "    echo \"❌ Erro: innoextract não encontrado\"\n" +
+                "    exit 1\n" +
+                "fi\n" +
                 "\n" +
                 "if [ $? -eq 0 ]; then\n" +
                 "    echo \"🎉 Jogo instalado com sucesso!\"\n" +
@@ -644,7 +869,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 "fi\n";
     }
     
-    private String saveScriptToTermuxHome(String scriptContent) {
+    private String saveScriptToTermuxHome(String scriptContent, String fileName) {
         try {
             String termuxHomeDir = getTermuxHomeDir();
             File termuxHome = new File(termuxHomeDir);
@@ -656,7 +881,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 return null;
             }
             
-            File scriptFile = new File(termuxHome, "gog_install.sh");
+            File scriptFile = new File(termuxHome, fileName);
             FileOutputStream fos = new FileOutputStream(scriptFile);
             fos.write(scriptContent.getBytes());
             fos.close();
@@ -672,6 +897,33 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
             Toast.makeText(this, "❌ Erro ao criar script de instalação.", Toast.LENGTH_LONG).show();
             return null;
         }
+    }
+    
+    private void showTermuxInitializationError() {
+        new MaterialAlertDialogBuilder(this)
+            .setTitle("❌ Erro de Inicialização do Termux")
+            .setMessage("🚨 **Não foi possível inicializar o ambiente Termux**\n\n" +
+                    "💡 **Possíveis causas:**\n" +
+                    "1. ❌ Termux não foi instalado corretamente\n" +
+                    "2. ❌ Termux nunca foi aberto para inicialização\n" +
+                    "3. ❌ Arquivos do Termux foram corrompidos\n\n" +
+                    "🔧 **Soluções:**\n" +
+                    "1. 🚀 Abra o Termux e aguarde a inicialização\n" +
+                    "2. 🔄 Execute: pkg update && pkg upgrade\n" +
+                    "3. 🔁 Reinstale o Termux se necessário")
+            .setPositiveButton("🚀 Abrir Termux", (dialog, which) -> {
+                try {
+                    Intent intent = getPackageManager().getLaunchIntentForPackage("com.termux");
+                    if (intent != null) {
+                        startActivity(intent);
+                        Toast.makeText(this, "💡 Aguarde a inicialização e tente novamente!", Toast.LENGTH_LONG).show();
+                    }
+                } catch (Exception e) {
+                    Toast.makeText(this, "Erro ao abrir Termux", Toast.LENGTH_SHORT).show();
+                }
+            })
+            .setNegativeButton("Cancelar", null)
+            .show();
     }
     
     private void executeTermuxCommand(String command, TermuxCommandCallback callback) {
@@ -777,9 +1029,252 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         });
     }
     
+    // Método para teste completo do ambiente Termux
+    private void testTermuxEnvironment() {
+        String testScript = createTermuxEnvironmentTestScript();
+        String scriptPath = saveScriptToTermuxHome(testScript, "test_environment.sh");
+        
+        if (scriptPath != null) {
+            executeTermuxCommand("bash " + scriptPath, new TermuxCommandCallback() {
+                @Override
+                public void onSuccess() {
+                    Toast.makeText(LibraryActivity.this, "✅ Teste de ambiente concluído! Verifique o log do Termux.", Toast.LENGTH_LONG).show();
+                }
+                
+                @Override
+                public void onError() {
+                    Toast.makeText(LibraryActivity.this, "❌ Falha no teste de ambiente. Verifique o Termux.", Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+    }
+    
+    private String createTermuxEnvironmentTestScript() {
+        return "#!/data/data/com.termux/files/usr/bin/bash\n" +
+                "\n" +
+                "echo '🧪 Teste Completo do Ambiente Termux'\n" +
+                "echo '======================================='\n" +
+                "\n" +
+                "# 1. Verificar estrutura de diretórios\n" +
+                "echo '📁 Verificando estrutura de diretórios...'\n" +
+                "ls -la /data/data/com.termux/files/ || echo '❌ Diretório base não encontrado'\n" +
+                "ls -la /data/data/com.termux/files/usr/ || echo '❌ Diretório usr não encontrado'\n" +
+                "ls -la /data/data/com.termux/files/usr/bin/ || echo '❌ Diretório bin não encontrado'\n" +
+                "ls -la /data/data/com.termux/files/home/ || echo '❌ Diretório home não encontrado'\n" +
+                "\n" +
+                "# 2. Verificar arquivos específicos\n" +
+                "echo '🔍 Verificando binários essenciais...'\n" +
+                "[ -f /data/data/com.termux/files/usr/bin/pkg ] && echo '✅ pkg encontrado' || echo '❌ pkg NÃO encontrado'\n" +
+                "[ -f /data/data/com.termux/files/usr/bin/apt ] && echo '✅ apt encontrado' || echo '❌ apt NÃO encontrado'\n" +
+                "[ -f /data/data/com.termux/files/usr/bin/bash ] && echo '✅ bash encontrado' || echo '❌ bash NÃO encontrado'\n" +
+                "\n" +
+                "# 3. Configurar ambiente como no script principal\n" +
+                "echo '⚙️ Configurando ambiente...'\n" +
+                "export TERMUX_PREFIX=/data/data/com.termux/files/usr\n" +
+                "export HOME=/data/data/com.termux/files/home\n" +
+                "export PATH=$TERMUX_PREFIX/bin:$PATH\n" +
+                "export LD_LIBRARY_PATH=$TERMUX_PREFIX/lib:$LD_LIBRARY_PATH\n" +
+                "export PKG_CONFIG_PATH=$TERMUX_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH\n" +
+                "export LANG=en_US.UTF-8\n" +
+                "export LC_ALL=en_US.UTF-8\n" +
+                "export TMPDIR=$TERMUX_PREFIX/tmp\n" +
+                "export ANDROID_DATA=/data\n" +
+                "export ANDROID_ROOT=/system\n" +
+                "\n" +
+                "# 4. Verificar PATH\n" +
+                "echo '🛤️ PATH atual:'\n" +
+                "echo $PATH\n" +
+                "\n" +
+                "# 5. Tentar executar comandos\n" +
+                "echo '⚡ Testando comandos...'\n" +
+                "which pkg && echo '✅ pkg no PATH' || echo '❌ pkg NÃO no PATH'\n" +
+                "which apt && echo '✅ apt no PATH' || echo '❌ apt NÃO no PATH'\n" +
+                "\n" +
+                "# 6. Testar execução direta\n" +
+                "echo '🎯 Testando execução direta...'\n" +
+                "$TERMUX_PREFIX/bin/pkg --version 2>&1 && echo '✅ pkg funciona diretamente' || echo '❌ pkg falha diretamente'\n" +
+                "$TERMUX_PREFIX/bin/apt --version 2>&1 && echo '✅ apt funciona diretamente' || echo '❌ apt falha diretamente'\n" +
+                "\n" +
+                "# 7. Source do bash.bashrc\n" +
+                "echo '📜 Testando bash.bashrc...'\n" +
+                "[ -f $TERMUX_PREFIX/etc/bash.bashrc ] && echo '✅ bash.bashrc encontrado' || echo '❌ bash.bashrc NÃO encontrado'\n" +
+                "if [ -f $TERMUX_PREFIX/etc/bash.bashrc ]; then\n" +
+                "    source $TERMUX_PREFIX/etc/bash.bashrc 2>/dev/null && echo '✅ bash.bashrc carregado' || echo '❌ Erro ao carregar bash.bashrc'\n" +
+                "fi\n" +
+                "\n" +
+                "# 8. Teste final de pkg\n" +
+                "echo '🏁 Teste final...'\n" +
+                "pkg --version 2>&1 && echo '✅ pkg FUNCIONANDO!' || echo '❌ pkg AINDA NÃO FUNCIONA'\n" +
+                "\n" +
+                "echo '📋 Teste completo finalizado!'\n";
+    }
+    
+    private void repairTermuxEnvironment() {
+        String repairScript = createTermuxRepairScript();
+        String scriptPath = saveScriptToTermuxHome(repairScript, "repair_termux.sh");
+        
+        if (scriptPath != null) {
+            executeTermuxCommand("bash " + scriptPath, new TermuxCommandCallback() {
+                @Override
+                public void onSuccess() {
+                    Toast.makeText(LibraryActivity.this, "✅ Ambiente Termux reparado com sucesso!", Toast.LENGTH_LONG).show();
+                }
+                
+                @Override
+                public void onError() {
+                    Toast.makeText(LibraryActivity.this, "❌ Falha ao reparar ambiente. Verifique o Termux manualmente.", Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+    }
+    
+    private String createTermuxRepairScript() {
+        return "#!/data/data/com.termux/files/usr/bin/bash\n" +
+                "echo '🔧 Reparando Ambiente Termux'\n" +
+                "export TERMUX_PREFIX=/data/data/com.termux/files/usr\n" +
+                "export HOME=/data/data/com.termux/files/home\n" +
+                "export PATH=$TERMUX_PREFIX/bin:$PATH\n" +
+                "mkdir -p $TERMUX_PREFIX/tmp\n" +
+                "mkdir -p $TERMUX_PREFIX/var/lib/dpkg\n" +
+                "echo '✅ Ambiente reparado!'\n";
+    }
+    
     interface TermuxCommandCallback {
         void onSuccess();
         void onError();
+    }
+    
+    // Método avançado para instalar innoextract com múltiplas tentativas
+    private void installInnoextractRobust(String sourceDir, String destDir) {
+        String robustInstallScript = createRobustInnoextractInstallScript();
+        String scriptPath = saveScriptToTermuxHome(robustInstallScript, "robust_innoextract_install.sh");
+        
+        if (scriptPath != null) {
+            executeTermuxCommand("bash " + scriptPath, new TermuxCommandCallback() {
+                @Override
+                public void onSuccess() {
+                    Toast.makeText(LibraryActivity.this, "✅ Ambiente configurado! Iniciando instalação...", Toast.LENGTH_SHORT).show();
+                    installGameWithInnoextract(sourceDir, destDir);
+                }
+                
+                @Override
+                public void onError() {
+                    showInnoextractInstallationError(sourceDir, destDir);
+                }
+            });
+        } else {
+            showInnoextractInstallationError(sourceDir, destDir);
+        }
+    }
+    
+    private String createRobustInnoextractInstallScript() {
+        return "#!/data/data/com.termux/files/usr/bin/bash\n" +
+                "\n" +
+                "echo '🔧 Script Robusto de Instalação do innoextract'\n" +
+                "echo '=============================================='\n" +
+                "\n" +
+                "# Configuração completa do ambiente\n" +
+                "export TERMUX_PREFIX=/data/data/com.termux/files/usr\n" +
+                "export HOME=/data/data/com.termux/files/home\n" +
+                "export PATH=$TERMUX_PREFIX/bin:$PATH\n" +
+                "export LD_LIBRARY_PATH=$TERMUX_PREFIX/lib:$LD_LIBRARY_PATH\n" +
+                "export PKG_CONFIG_PATH=$TERMUX_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH\n" +
+                "export LANG=en_US.UTF-8\n" +
+                "export LC_ALL=en_US.UTF-8\n" +
+                "export TMPDIR=$TERMUX_PREFIX/tmp\n" +
+                "export ANDROID_DATA=/data\n" +
+                "export ANDROID_ROOT=/system\n" +
+                "export SHELL=$TERMUX_PREFIX/bin/bash\n" +
+                "export TERM=xterm-256color\n" +
+                "\n" +
+                "# Criar diretórios necessários\n" +
+                "mkdir -p $TERMUX_PREFIX/tmp 2>/dev/null\n" +
+                "mkdir -p $TERMUX_PREFIX/var/lib/dpkg 2>/dev/null\n" +
+                "mkdir -p $TERMUX_PREFIX/var/cache/apt 2>/dev/null\n" +
+                "mkdir -p $HOME/.termux 2>/dev/null\n" +
+                "\n" +
+                "# Source do bash.bashrc se existir\n" +
+                "if [ -f $TERMUX_PREFIX/etc/bash.bashrc ]; then\n" +
+                "    echo '📚 Carregando bash.bashrc...'\n" +
+                "    source $TERMUX_PREFIX/etc/bash.bashrc 2>/dev/null || true\n" +
+                "fi\n" +
+                "\n" +
+                "# Configurar dpkg\n" +
+                "if [ -f $TERMUX_PREFIX/bin/dpkg ]; then\n" +
+                "    echo '⚙️ Configurando dpkg...'\n" +
+                "    $TERMUX_PREFIX/bin/dpkg --configure -a 2>/dev/null || true\n" +
+                "fi\n" +
+                "\n" +
+                "echo '🔍 Verificando se innoextract já está instalado...'\n" +
+                "if command -v innoextract >/dev/null 2>&1; then\n" +
+                "    echo '✅ innoextract já está disponível no PATH!'\n" +
+                "    exit 0\n" +
+                "elif [ -f $TERMUX_PREFIX/bin/innoextract ]; then\n" +
+                "    echo '✅ innoextract já está instalado em $TERMUX_PREFIX/bin/'\n" +
+                "    exit 0\n" +
+                "fi\n" +
+                "\n" +
+                "echo '📦 innoextract não encontrado. Iniciando instalação...'\n" +
+                "\n" +
+                "# Verificar se pkg funciona\n" +
+                "echo '🧪 Testando comando pkg...'\n" +
+                "PKG_CMD=\"\"\n" +
+                "if command -v pkg >/dev/null 2>&1; then\n" +
+                "    PKG_CMD=\"pkg\"\n" +
+                "    echo '✅ pkg encontrado no PATH'\n" +
+                "elif [ -f $TERMUX_PREFIX/bin/pkg ]; then\n" +
+                "    PKG_CMD=\"$TERMUX_PREFIX/bin/pkg\"\n" +
+                "    echo '✅ pkg encontrado em $TERMUX_PREFIX/bin/'\n" +
+                "else\n" +
+                "    echo '❌ pkg não encontrado!'\n" +
+                "    echo '💡 O Termux pode não estar completamente instalado'\n" +
+                "    exit 1\n" +
+                "fi\n" +
+                "\n" +
+                "# Testar se pkg funciona\n" +
+                "if ! \"$PKG_CMD\" --version >/dev/null 2>&1; then\n" +
+                "    echo '❌ pkg não está funcionando corretamente'\n" +
+                "    echo '🔧 Tentando inicializar pkg...'\n" +
+                "    \n" +
+                "    # Tentar múltiplas abordagens\n" +
+                "    source $TERMUX_PREFIX/etc/bash.bashrc 2>/dev/null || true\n" +
+                "    export PKG_CONFIG_PATH=$TERMUX_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH\n" +
+                "    \n" +
+                "    if ! \"$PKG_CMD\" --version >/dev/null 2>&1; then\n" +
+                "        echo '❌ Não foi possível inicializar pkg'\n" +
+                "        echo '💡 Execute o Termux manualmente primeiro'\n" +
+                "        exit 1\n" +
+                "    fi\n" +
+                "fi\n" +
+                "\n" +
+                "echo '✅ pkg está funcionando! Instalando innoextract...'\n" +
+                "\n" +
+                "# Atualizar repositórios e instalar\n" +
+                "echo '🔄 Atualizando repositórios...'\n" +
+                "\"$PKG_CMD\" update -y 2>&1 || echo '⚠️ Aviso: falha ao atualizar repositórios'\n" +
+                "\n" +
+                "echo '📦 Instalando innoextract...'\n" +
+                "if \"$PKG_CMD\" install -y innoextract 2>&1; then\n" +
+                "    echo '🎉 innoextract instalado com sucesso!'\n" +
+                "    \n" +
+                "    # Verificar se a instalação funcionou\n" +
+                "    if command -v innoextract >/dev/null 2>&1; then\n" +
+                "        echo '✅ Verificação: innoextract está no PATH'\n" +
+                "        innoextract --version 2>&1 || echo 'Versão não disponível'\n" +
+                "    elif [ -f $TERMUX_PREFIX/bin/innoextract ]; then\n" +
+                "        echo '✅ Verificação: innoextract instalado em $TERMUX_PREFIX/bin/'\n" +
+                "        $TERMUX_PREFIX/bin/innoextract --version 2>&1 || echo 'Versão não disponível'\n" +
+                "    else\n" +
+                "        echo '❌ Erro: innoextract não foi encontrado após instalação'\n" +
+                "        exit 1\n" +
+                "    fi\n" +
+                "else\n" +
+                "    echo '❌ Falha na instalação do innoextract'\n" +
+                "    echo '💡 Tente executar manualmente: pkg install innoextract'\n" +
+                "    exit 1\n" +
+                "fi\n" +
+                "\n" +
+                "echo '🏁 Instalação concluída com sucesso!'\n";
     }
     
     private void checkPermissions() {

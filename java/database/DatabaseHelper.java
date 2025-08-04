@@ -1,4 +1,4 @@
-package com.example.gogdownloader.database;
+package com.termux.database;
 
 import android.content.ContentValues;
 import android.content.Context;
@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
 
-import com.example.gogdownloader.models.Game;
+import com.termux.models.Game;
 
 import org.json.JSONException;
 import org.json.JSONObject;

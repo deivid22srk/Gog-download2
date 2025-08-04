@@ -1,4 +1,4 @@
-package com.example.gogdownloader.utils;
+package com.termux.utils;
 
 /**
  * Classe para medir velocidade de download em tempo real

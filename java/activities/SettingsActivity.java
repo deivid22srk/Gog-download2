@@ -1,4 +1,4 @@
-package com.example.gogdownloader.activities;
+package com.termux.activities;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -17,11 +17,11 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
-import com.example.gogdownloader.R;
-import com.example.gogdownloader.database.DatabaseHelper;
-import com.example.gogdownloader.utils.ImageLoader;
-import com.example.gogdownloader.utils.PreferencesManager;
-import com.example.gogdownloader.utils.SAFDownloadManager;
+import com.termux.R;
+import com.termux.database.DatabaseHelper;
+import com.termux.utils.ImageLoader;
+import com.termux.utils.PreferencesManager;
+import com.termux.utils.SAFDownloadManager;
 
 import java.io.File;
 

@@ -1,4 +1,4 @@
-package com.example.gogdownloader.activities;
+package com.termux.activities;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -22,7 +22,7 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.example.gogdownloader.R;
+import com.termux.R;
 
 public class OAuthWebViewActivity extends BaseActivity {
     

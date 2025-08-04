@@ -1,11 +1,11 @@
-package com.example.gogdownloader.application;
+package com.termux.application;
 
 import android.app.Application;
 import android.content.Intent;
 import android.util.Log;
-import com.example.gogdownloader.utils.DynamicColorManager;
-import com.example.gogdownloader.services.DownloadService;
-import com.example.gogdownloader.database.DatabaseHelper;
+import com.termux.utils.DynamicColorManager;
+import com.termux.services.DownloadService;
+import com.termux.database.DatabaseHelper;
 
 /**
  * Application class for GOG Downloader.
@@ -74,7 +74,7 @@ public class GOGDownloaderApplication extends Application {
                         
                         // Iniciar o DownloadService para retomar downloads
                         Intent serviceIntent = new Intent(this, DownloadService.class);
-                        serviceIntent.setAction("com.example.gogdownloader.RESUME_DOWNLOADS");
+                        serviceIntent.setAction("com.termux.RESUME_DOWNLOADS");
                         
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                             startForegroundService(serviceIntent);

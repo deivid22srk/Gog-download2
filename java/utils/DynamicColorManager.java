@@ -1,4 +1,4 @@
-package com.example.gogdownloader.utils;
+package com.termux.utils;
 
 import android.app.Application;
 import android.content.Context;
@@ -7,7 +7,7 @@ import androidx.annotation.ColorInt;
 import androidx.core.content.ContextCompat;
 import com.google.android.material.color.DynamicColors;
 import com.google.android.material.color.MaterialColors;
-import com.example.gogdownloader.R;
+import com.termux.R;
 
 /**
  * Utility class to manage Material You Dynamic Color theming across the app.

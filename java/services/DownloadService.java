@@ -1,4 +1,4 @@
-package com.example.gogdownloader.services;
+package com.termux.services;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -14,15 +14,15 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import com.example.gogdownloader.R;
-import com.example.gogdownloader.activities.LibraryActivity;
-import com.example.gogdownloader.api.GOGLibraryManager;
-import com.example.gogdownloader.database.DatabaseHelper;
-import com.example.gogdownloader.models.DownloadLink;
-import com.example.gogdownloader.models.Game;
-import com.example.gogdownloader.utils.PreferencesManager;
-import com.example.gogdownloader.utils.SAFDownloadManager;
-import com.example.gogdownloader.utils.SpeedMeter;
+import com.termux.R;
+import com.termux.activities.LibraryActivity;
+import com.termux.api.GOGLibraryManager;
+import com.termux.database.DatabaseHelper;
+import com.termux.models.DownloadLink;
+import com.termux.models.Game;
+import com.termux.utils.PreferencesManager;
+import com.termux.utils.SAFDownloadManager;
+import com.termux.utils.SpeedMeter;
 
 import androidx.documentfile.provider.DocumentFile;
 
@@ -53,14 +53,14 @@ public class DownloadService extends Service {
     private static final String TAG = "DownloadService";
     
     // Actions
-    public static final String ACTION_DOWNLOAD_PROGRESS = "com.example.gogdownloader.DOWNLOAD_PROGRESS";
-    private static final String ACTION_DOWNLOAD = "com.example.gogdownloader.DOWNLOAD";
-    private static final String ACTION_DOWNLOAD_MULTIPLE = "com.example.gogdownloader.DOWNLOAD_MULTIPLE";
-    private static final String ACTION_PAUSE = "com.example.gogdownloader.PAUSE";
-    private static final String ACTION_RESUME = "com.example.gogdownloader.RESUME";
-    private static final String ACTION_RESUME_DOWNLOADS = "com.example.gogdownloader.RESUME_DOWNLOADS";
-    private static final String ACTION_CANCEL = "com.example.gogdownloader.CANCEL";
-    private static final String ACTION_STOP_SERVICE = "com.example.gogdownloader.STOP_SERVICE";
+    public static final String ACTION_DOWNLOAD_PROGRESS = "com.termux.DOWNLOAD_PROGRESS";
+    private static final String ACTION_DOWNLOAD = "com.termux.DOWNLOAD";
+    private static final String ACTION_DOWNLOAD_MULTIPLE = "com.termux.DOWNLOAD_MULTIPLE";
+    private static final String ACTION_PAUSE = "com.termux.PAUSE";
+    private static final String ACTION_RESUME = "com.termux.RESUME";
+    private static final String ACTION_RESUME_DOWNLOADS = "com.termux.RESUME_DOWNLOADS";
+    private static final String ACTION_CANCEL = "com.termux.CANCEL";
+    private static final String ACTION_STOP_SERVICE = "com.termux.STOP_SERVICE";
     
     // Extras
     public static final String EXTRA_GAME_ID = "extra_game_id";

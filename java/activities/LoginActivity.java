@@ -1,4 +1,4 @@
-package com.example.gogdownloader.activities;
+package com.termux.activities;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -17,9 +17,9 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.example.gogdownloader.R;
-import com.example.gogdownloader.api.GOGAuthManager;
-import com.example.gogdownloader.utils.PreferencesManager;
+import com.termux.R;
+import com.termux.api.GOGAuthManager;
+import com.termux.utils.PreferencesManager;
 import com.google.android.material.textfield.TextInputEditText;
 
 import org.json.JSONObject;

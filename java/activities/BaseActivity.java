@@ -1,4 +1,4 @@
-package com.example.gogdownloader.activities;
+package com.termux.activities;
 
 import android.os.Build;
 import android.os.Bundle;
@@ -9,7 +9,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import com.google.android.material.color.DynamicColors;
-import com.example.gogdownloader.utils.DynamicColorManager;
+import com.termux.utils.DynamicColorManager;
 
 /**
  * Base activity that sets up Material You Dynamic Color for all activities.

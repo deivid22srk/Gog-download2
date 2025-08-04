@@ -1,4 +1,4 @@
-package com.example.gogdownloader.utils;
+package com.termux.utils;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -9,7 +9,7 @@ import android.util.Log;
 import android.util.LruCache;
 import android.widget.ImageView;
 
-import com.example.gogdownloader.R;
+import com.termux.R;
 
 import java.io.IOException;
 import java.io.InputStream;
