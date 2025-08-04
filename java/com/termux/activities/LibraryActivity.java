@@ -321,7 +321,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         startService(intent);
     }
 
-    private void launchTermuxWithPaths(List<String> sourcePaths, String destinationPath) {
+    private void executeInstallScript(String scriptPath) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + getPackageName()));
@@ -329,21 +329,48 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
             return;
         }
 
-        StringBuilder commandBuilder = new StringBuilder();
-        commandBuilder.append("if ! command -v innoextract &> /dev/null; then pkg install -y innoextract; fi");
-
-        for (String sourcePath : sourcePaths) {
-            commandBuilder.append(" && innoextract -d \"").append(destinationPath).append("\" \"").append(sourcePath).append("\"");
-        }
-
         Intent intent = new Intent();
         intent.setClassName("com.termux", "com.termux.app.RunCommandService");
         intent.setAction("com.termux.RUN_COMMAND");
         intent.putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash");
-        intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", commandBuilder.toString()});
+        intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{scriptPath});
         intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home");
         intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
         startService(intent);
+    }
+
+    private String createAndSaveInstallScript(String sourceDir, String destDir) {
+        String script = "#!/data/data/com.termux/files/usr/bin/bash\n" +
+                "GOG_DIR=\"" + sourceDir + "\"\n" +
+                "DEST_DIR=\"" + destDir + "\"\n" +
+                "if ! command -v innoextract &>/dev/null; then\n" +
+                "    echo \"Erro: innoextract não está instalado. Use: pkg install innoextract\"\n" +
+                "    exit 1\n" +
+                "fi\n" +
+                "cd \"$GOG_DIR\" || { echo \"Erro: pasta $GOG_DIR não encontrada.\"; exit 1; }\n" +
+                "SETUP_EXE=$(ls setup_*.exe 2>/dev/null | head -n 1)\n" +
+                "if [ ! -f \"$SETUP_EXE\" ]; then\n" +
+                "    echo \"Erro: Instalador .exe não encontrado na pasta.\"\n" +
+                "    exit 1\n" +
+                "fi\n" +
+                "echo \"Extraindo arquivos para $DEST_DIR...\"\n" +
+                "innoextract --output-dir=\"$DEST_DIR\" \"$SETUP_EXE\"\n" +
+                "if [ $? -eq 0 ]; then\n" +
+                "    echo \"✅ Arquivos extraídos com sucesso!\"\n" +
+                "else\n" +
+                "    echo \"❌ Ocorreu um erro durante a extração.\"\n" +
+                "fi\n";
+
+        try {
+            File scriptFile = new File(getCacheDir(), "install_script.sh");
+            FileOutputStream fos = new FileOutputStream(scriptFile);
+            fos.write(script.getBytes());
+            fos.close();
+            return scriptFile.getAbsolutePath();
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
     
     private void checkPermissions() {
@@ -1042,9 +1069,12 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                     }
                 }
                 if (!sourceFiles.isEmpty()) {
-                    launchTermuxWithPaths(sourceFiles, destinationFolderPath);
+                    String scriptPath = createAndSaveInstallScript(sourceFolderPath, destinationFolderPath);
+                    if (scriptPath != null) {
+                        executeInstallScript(scriptPath);
+                    }
                 } else {
-                    Toast.makeText(this, "Nenhum arquivo .bin encontrado na pasta de origem.", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Nenhum arquivo .exe ou .bin encontrado na pasta de origem.", Toast.LENGTH_SHORT).show();
                 }
             }
         });
