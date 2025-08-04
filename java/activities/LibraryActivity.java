@@ -274,6 +274,11 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 try {
                     startActivity(intent);
+                    new android.os.Handler().postDelayed(() -> {
+                        Intent returnIntent = new Intent(LibraryActivity.this, LibraryActivity.class);
+                        returnIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                        startActivity(returnIntent);
+                    }, 5000);
                 } catch (Exception e) {
                     Toast.makeText(this, "Não foi possível abrir o Termux. Verifique se está instalado.", Toast.LENGTH_SHORT).show();
                 }
