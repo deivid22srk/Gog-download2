@@ -247,7 +247,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     private void setupClickListeners() {
         refreshButton.setOnClickListener(v -> refreshLibrary());
         retryButton.setOnClickListener(v -> loadLibrary());
-        installFab.setOnClickListener(v -> launchTermuxForInstallation());
+        installFab.setOnClickListener(v -> openInstallerFolderPicker());
 
         overlayPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
@@ -307,6 +307,27 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         intent.setAction("com.termux.RUN_COMMAND");
         intent.putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash");
         intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", "termux-setup-storage && if ! command -v innoextract &> /dev/null; then pkg install -y innoextract; fi"});
+        intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home");
+        intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
+        startService(intent);
+    }
+
+    private void launchTermuxWithUris(Uri sourceUri, Uri destinationUri) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName()));
+            overlayPermissionLauncher.launch(intent);
+            return;
+        }
+
+        String command = "if ! command -v innoextract &> /dev/null; then pkg install -y innoextract; fi && " +
+                "innoextract -d \"" + destinationUri.toString() + "\" \"" + sourceUri.toString() + "\"/*.bin";
+
+        Intent intent = new Intent();
+        intent.setClassName("com.termux", "com.termux.app.RunCommandService");
+        intent.setAction("com.termux.RUN_COMMAND");
+        intent.putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash");
+        intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[]{"-c", command});
         intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home");
         intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", false);
         startService(intent);
@@ -982,13 +1003,15 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
                     if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                        Uri uri = result.getData().getData();
-                        if (uri != null) {
-                            showInstallProgressDialog();
-                            Intent intent = new Intent(this, InstallationService.class);
-                            intent.setAction(InstallationService.ACTION_INSTALL);
-                            intent.putExtra(InstallationService.EXTRA_INSTALLER_FOLDER_URI, uri);
-                            startService(intent);
+                        Uri sourceUri = result.getData().getData();
+                        if (sourceUri != null) {
+                            String destinationUriString = preferencesManager.getInstallUri();
+                            if (destinationUriString != null) {
+                                Uri destinationUri = Uri.parse(destinationUriString);
+                                launchTermuxWithUris(sourceUri, destinationUri);
+                            } else {
+                                Toast.makeText(this, "Pasta de instalação não configurada.", Toast.LENGTH_SHORT).show();
+                            }
                         }
                     }
                 });
