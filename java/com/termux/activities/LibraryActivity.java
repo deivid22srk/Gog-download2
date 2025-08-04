@@ -12,8 +12,11 @@ import android.provider.DocumentsContract;
 import android.provider.Settings;
 import android.text.Editable;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -998,23 +1001,9 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     }
     
     private void openInstallerFolderPicker() {
-        FolderPickerDialogFragment dialog = new FolderPickerDialogFragment();
-        dialog.setFolderPickerListener(path -> {
-            String destinationUriString = preferencesManager.getInstallUri();
-            if (destinationUriString != null) {
-                Uri destinationUri = Uri.parse(destinationUriString);
-                SAFDownloadManager safManager = new SAFDownloadManager(this);
-                String destinationPath = safManager.getRealPathFromURI(destinationUri);
-                if (destinationPath != null) {
-                    launchTermuxWithPaths(path, destinationPath);
-                } else {
-                    Toast.makeText(this, "Não foi possível obter o caminho real da pasta de instalação.", Toast.LENGTH_SHORT).show();
-                }
-            } else {
-                Toast.makeText(this, "Pasta de instalação não configurada.", Toast.LENGTH_SHORT).show();
-            }
-        });
-        dialog.show(getSupportFragmentManager(), "FolderPickerDialogFragment");
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        installerFolderPickerLauncher.launch(intent);
     }
 
     private void showInstallProgressDialog() {
