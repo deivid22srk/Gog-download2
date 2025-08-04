@@ -523,7 +523,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 "        echo \"\"\n" +
                 "        echo \"❌ Falha ao instalar o innoextract. Abortando.\"\n" +
                 "        echo \"💡 Tente instalar manualmente: execute 'pkg install innoextract' no Termux.\"\n" +
-                "        read -p \"Pressione Enter para sair...\"\"\n" +
+                "        read -p \"Pressione Enter para sair...\"\n" +
                 "        exit 1\n" +
                 "    fi\n" +
                 "fi\n" +
@@ -535,7 +535,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 "# Verificar pasta de origem\n" +
                 "if [ ! -d \"$GOG_DIR\" ]; then\n" +
                 "    echo \"❌ Erro: pasta de origem '$GOG_DIR' não encontrada.\"\n" +
-                "    read -p \"Pressione Enter para sair...\"\"\n" +
+                "    read -p \"Pressione Enter para sair...\"\n" +
                 "    exit 1\n" +
                 "fi\n" +
                 "\n" +
@@ -548,7 +548,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 "    echo \"❌ Erro: Nenhum instalador 'setup_*.exe' encontrado na pasta.\"\n" +
                 "    echo \"📁 Arquivos na pasta:\"\n" +
                 "    ls -la\n" +
-                "    read -p \"Pressione Enter para sair...\"\"\n" +
+                "    read -p \"Pressione Enter para sair...\"\n" +
                 "    exit 1\n" +
                 "fi\n" +
                 "echo \"✅ Instalador encontrado: $SETUP_EXE\"\n" +
@@ -568,10 +568,10 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
                 "else\n" +
                 "    echo \"❌ Ocorreu um erro durante a extração.\"\n" +
                 "    echo \"💡 Verifique se o arquivo é um instalador GOG válido e se há espaço suficiente.\"\n" +
-                "    read -p \"Pressione Enter para sair...\"\"\n" +
+                "    read -p \"Pressione Enter para sair...\"\n" +
                 "    exit 1\n" +
                 "fi\n" +
-                "read -p \"Pressione Enter para fechar esta janela...\"\"\n";
+                "read -p \"Pressione Enter para fechar esta janela...\"\n";
     }
     
     private String saveScriptToAppExternalDir(String scriptContent) {
