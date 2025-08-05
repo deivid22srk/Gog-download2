@@ -38,6 +38,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -115,8 +116,8 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         
         initializeManagers(); // Initialize managers first to access preferences
 
-        // Check if folders are selected
-        if (!preferencesManager.hasDownloadLocationConfigured()) {
+        // Check if folders are selected and permissions are granted
+        if (!preferencesManager.hasDownloadLocationConfigured() || !permissionHelper.hasAllEssentialPermissions()) {
             Intent intent = new Intent(this, FolderSelectionActivity.class);
             startActivity(intent);
             finish();
@@ -264,7 +265,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         gamesAdapter = new GamesAdapter(this);
         gamesAdapter.setOnGameActionListener(this);
         
-        gamesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        gamesRecyclerView.setLayoutManager(new GridLayoutManager(this, 2));
         gamesRecyclerView.setAdapter(gamesAdapter);
     }
     
@@ -1092,6 +1093,15 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     }
 
     private void showDownloadSelectionDialog(Game game, List<DownloadLink> downloadLinks) {
+        // Filter download links based on selected platforms
+        java.util.Set<String> selectedPlatforms = preferencesManager.getSelectedPlatforms();
+        List<DownloadLink> filteredLinks = new ArrayList<>();
+        for (DownloadLink link : downloadLinks) {
+            if (selectedPlatforms.contains(link.getPlatform().name().toLowerCase())) {
+                filteredLinks.add(link);
+            }
+        }
+
         com.google.android.material.dialog.MaterialAlertDialogBuilder builder = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this);
         LayoutInflater inflater = this.getLayoutInflater();
         View dialogView = inflater.inflate(R.layout.dialog_download_selection, null);
@@ -1112,7 +1122,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         // Configurar RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         
-        DownloadLinkAdapter adapter = new DownloadLinkAdapter(this, downloadLinks, selectedLinks -> {
+        DownloadLinkAdapter adapter = new DownloadLinkAdapter(this, filteredLinks, selectedLinks -> {
             // Atualizar informações de seleção
             int selectedCount = selectedLinks.size();
             long totalSize = 0;
@@ -1261,63 +1271,12 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     
     @Override
     public void onOpenGame(Game game) {
-        // Mostrar informações do jogo baixado ou abrir pasta
-        if (game.getLocalPath() != null && !game.getLocalPath().isEmpty()) {
-            showGameDetails(game);
-        }
+        // TODO: Implement a proper game details screen
     }
     
     @Override
     public void onGameClick(Game game) {
-        showGameDetails(game);
-    }
-    
-    private void showGameDetails(Game game) {
-        // Criar dialog com detalhes do jogo
-        com.google.android.material.dialog.MaterialAlertDialogBuilder builder = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this);
-        builder.setTitle(game.getTitle());
-        
-        StringBuilder details = new StringBuilder();
-        
-        if (game.getDeveloper() != null) {
-            details.append("Desenvolvedor: ").append(game.getDeveloper()).append("\n");
-        }
-        
-        if (game.getPublisher() != null) {
-            details.append("Publisher: ").append(game.getPublisher()).append("\n");
-        }
-        
-        if (!game.getGenres().isEmpty()) {
-            details.append("Gêneros: ").append(game.getGenresString()).append("\n");
-        }
-        
-        if (game.getTotalSize() > 0) {
-            details.append("Tamanho: ").append(game.getFormattedSize()).append("\n");
-        }
-        
-        details.append("Status: ");
-        switch (game.getStatus()) {
-            case NOT_DOWNLOADED:
-                details.append("Não baixado");
-                break;
-            case DOWNLOADING:
-                details.append("Baixando... ").append(game.getDownloadProgressPercent()).append("%");
-                break;
-            case DOWNLOADED:
-                details.append("Baixado");
-                break;
-            case FAILED:
-                details.append("Falha no download");
-                break;
-        }
-        
-        if (game.getLocalPath() != null && !game.getLocalPath().isEmpty()) {
-            details.append("\nLocal: ").append(game.getLocalPath());
-        }
-        
-        builder.setMessage(details.toString());
-        builder.setPositiveButton("OK", null);
-        builder.show();
+        // TODO: Implement a proper game details screen
     }
     
     /**

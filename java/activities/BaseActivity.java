@@ -10,6 +10,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import com.google.android.material.color.DynamicColors;
 import com.termux.utils.DynamicColorManager;
+import com.termux.utils.PreferencesManager;
 
 /**
  * Base activity that sets up Material You Dynamic Color for all activities.
@@ -23,7 +24,10 @@ public abstract class BaseActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // Apply Dynamic Color before calling super.onCreate()
-        applyDynamicColor();
+        PreferencesManager preferencesManager = new PreferencesManager(this);
+        if (preferencesManager.isDynamicThemingEnabled() && preferencesManager.isMaterialYouEnabled()) {
+            applyDynamicColor();
+        }
         super.onCreate(savedInstanceState);
         
         // Log dynamic color status

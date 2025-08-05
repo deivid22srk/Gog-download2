@@ -7,7 +7,8 @@
 
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
@@ -15,8 +16,7 @@
             android:layout_height="?attr/actionBarSize"
             app:title="@string/library_title"
             app:titleTextColor="?attr/colorOnSurface"
-            android:background="?attr/colorSurface"
-            app:popupTheme="?attr/actionBarPopupTheme" />
+            app:menu="@menu/menu_library" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
@@ -34,8 +34,9 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
             android:layout_marginEnd="16dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp">
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            app:cardElevation="4dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -46,8 +47,8 @@
 
                 <ImageView
                     android:id="@+id/userAvatar"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
                     android:layout_marginEnd="16dp"
                     android:src="@drawable/ic_account_circle"
                     android:background="@drawable/image_border"
@@ -64,15 +65,15 @@
                         android:id="@+id/userNameText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Nome do Usuário"
-                        android:textAppearance="?attr/textAppearanceTitleMedium"
+                        android:text="Username"
+                        android:textAppearance="?attr/textAppearanceTitleLarge"
                         android:textStyle="bold" />
 
                     <com.google.android.material.textview.MaterialTextView
                         android:id="@+id/gameCountText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="0 jogos na biblioteca"
+                        android:text="0 games"
                         android:textAppearance="?attr/textAppearanceBodyMedium"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -80,10 +81,10 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/refreshButton"
+                    style="@style/Widget.Material3.Button.IconButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/refresh"
-                    style="@style/Widget.Material3.Button.TonalButton" />
+                    app:icon="@drawable/ic_search" />
 
             </LinearLayout>
 
@@ -94,8 +95,8 @@
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
             android:layout_marginBottom="8dp"
             app:hintEnabled="false"
             app:startIconDrawable="@drawable/ic_search">
@@ -131,12 +132,13 @@
                 android:layout_height="match_parent"
                 android:orientation="vertical"
                 android:gravity="center"
-                android:visibility="gone">
+                android:visibility="gone"
+                android:background="?attr/colorSurface">
 
-                <ProgressBar
+                <com.google.android.material.progressindicator.CircularProgressIndicator
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:indeterminateTint="?attr/colorPrimary" />
+                    android:indeterminate="true" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:layout_width="wrap_content"
@@ -155,31 +157,32 @@
                 android:layout_height="match_parent"
                 android:orientation="vertical"
                 android:gravity="center"
-                android:visibility="gone">
+                android:visibility="gone"
+                android:padding="32dp">
 
                 <ImageView
-                    android:layout_width="120dp"
-                    android:layout_height="120dp"
+                    android:layout_width="150dp"
+                    android:layout_height="150dp"
                     android:layout_marginBottom="24dp"
                     android:src="@drawable/ic_image"
-                    android:alpha="0.5"
+                    android:alpha="0.6"
                     android:contentDescription="Empty Library" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/no_games"
-                    android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                    android:textAppearance="?attr/textAppearanceHeadlineMedium"
                     android:textColor="?attr/colorOnSurfaceVariant"
-                    android:textAlignment="center" />
+                    android:textAlignment="center"
+                    android:layout_marginBottom="16dp"/>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/retryButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
                     android:text="@string/retry"
-                    style="@style/Widget.Material3.Button" />
+                    style="@style/Widget.Material3.Button.TonalButton" />
 
             </LinearLayout>
 
@@ -187,7 +190,7 @@
 
     </LinearLayout>
 
-    <!-- Floating Action Button for Settings -->
+    <!-- Floating Action Button for Installation -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/installFab"
         android:layout_width="wrap_content"
@@ -195,7 +198,7 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
         android:src="@android:drawable/ic_menu_upload"
-        android:contentDescription="Instalar Jogo"
+        android:contentDescription="Install Game"
         app:backgroundTint="?attr/colorPrimaryContainer"
         app:tint="?attr/colorOnPrimaryContainer" />
 

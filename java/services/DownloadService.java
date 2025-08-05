@@ -245,8 +245,10 @@ public class DownloadService extends Service {
         }
         
         if (httpClient != null) {
-            httpClient.dispatcher().executorService().shutdown();
-            httpClient.connectionPool().evictAll();
+            new Thread(() -> {
+                httpClient.dispatcher().executorService().shutdown();
+                httpClient.connectionPool().evictAll();
+            }).start();
         }
         
         if (databaseHelper != null) {
@@ -461,6 +463,14 @@ public class DownloadService extends Service {
 
     private void pauseDownload(long gameId) {
         Log.d(TAG, "Pausing download for game ID: " + gameId);
+
+        Game game = databaseHelper.getGame(gameId);
+        if (game != null) {
+            game.setStatus(Game.DownloadStatus.PAUSED);
+            databaseHelper.updateGame(game);
+            onDownloadPaused(game);
+        }
+
         DownloadTask task = activeDownloads.get(gameId);
         if (task != null) {
             task.pause();
@@ -797,6 +807,7 @@ public class DownloadService extends Service {
                     Log.d(TAG, "Download paused for game: " + game.getTitle());
                     databaseHelper.updateDownloadStatus(downloadId, "PAUSED", null);
                     onDownloadPaused(game);
+                    showDownloadNotification(game, game.getDownloadProgressPercent(), "Paused");
                 } else if (cancelled) {
                     Log.d(TAG, "Download cancelled for game: " + game.getTitle());
                     databaseHelper.updateDownloadStatus(downloadId, "CANCELLED", null);
@@ -917,7 +928,11 @@ public class DownloadService extends Service {
                     long lastProgressUpdate = System.currentTimeMillis();
                     speedMeter.reset(); // Reset do medidor
                     
-                    while ((bytesRead = inputStream.read(buffer)) != -1 && !cancelled && !paused) {
+                    while (!cancelled && !paused) {
+                        bytesRead = inputStream.read(buffer);
+                        if (bytesRead == -1) {
+                            break;
+                        }
                         outputStream.write(buffer, 0, bytesRead);
                         downloadedBytes += bytesRead;
                         

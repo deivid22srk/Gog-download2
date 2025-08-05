@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_download"
+        android:title="@string/download" />
+    <item
+        android:id="@+id/action_pause"
+        android:title="@string/pause" />
+    <item
+        android:id="@+id/action_resume"
+        android:title="@string/resume" />
+    <item
+        android:id="@+id/action_cancel"
+        android:title="@string/cancel" />
+    <item
+        android:id="@+id/action_open"
+        android:title="Open" />
+</menu>

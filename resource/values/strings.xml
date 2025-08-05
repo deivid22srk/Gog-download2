@@ -91,4 +91,5 @@
     <string name="network_error">Erro de conexão. Verifique sua internet.</string>
     <string name="permission_storage">Permissão de armazenamento (opcional - usará SAF se negada)</string>
     <string name="permission_notification">Permissão de notificação necessária para progresso de download</string>
+    <string name="game_cover_description">Game cover image</string>
 </resources>

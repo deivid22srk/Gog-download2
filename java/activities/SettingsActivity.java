@@ -17,6 +17,9 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.termux.R;
 import com.termux.database.DatabaseHelper;
 import com.termux.utils.ImageLoader;
@@ -27,18 +30,23 @@ import java.io.File;
 
 public class SettingsActivity extends BaseActivity {
     
-    private TextView userEmailText;
     private TextView appVersionText;
     private TextView safPathText;
     private Button changeSafFolderButton;
-    private Button logoutButton;
     private Button clearCacheButton;
+    private SwitchMaterial dynamicColorSwitch;
+    private SwitchMaterial materialYouSwitch;
+    private ChipGroup platformChipGroup;
+    private Chip windowsChip;
+    private Chip linuxChip;
+    private Chip macChip;
     
     private PreferencesManager preferencesManager;
     private DatabaseHelper databaseHelper;
     
     private ActivityResultLauncher<Intent> folderPickerLauncher;
     private String selectedPath;
+    private boolean isProgrammaticChange = false;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,12 +72,16 @@ public class SettingsActivity extends BaseActivity {
     }
     
     private void initializeViews() {
-        userEmailText = findViewById(R.id.userEmailText);
         appVersionText = findViewById(R.id.appVersionText);
         safPathText = findViewById(R.id.safPathText);
         changeSafFolderButton = findViewById(R.id.changeSafFolderButton);
-        logoutButton = findViewById(R.id.logoutButton);
         clearCacheButton = findViewById(R.id.clearCacheButton);
+        dynamicColorSwitch = findViewById(R.id.dynamicColorSwitch);
+        materialYouSwitch = findViewById(R.id.materialYouSwitch);
+        platformChipGroup = findViewById(R.id.platformChipGroup);
+        windowsChip = findViewById(R.id.windowsChip);
+        linuxChip = findViewById(R.id.linuxChip);
+        macChip = findViewById(R.id.macChip);
     }
     
     private void initializeManagers() {
@@ -105,8 +117,23 @@ public class SettingsActivity extends BaseActivity {
     
     private void setupClickListeners() {
         changeSafFolderButton.setOnClickListener(v -> openFolderPicker());
-        logoutButton.setOnClickListener(v -> showLogoutConfirmation());
         clearCacheButton.setOnClickListener(v -> showClearCacheConfirmation());
+
+        dynamicColorSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isProgrammaticChange) return;
+            preferencesManager.setDynamicTheming(isChecked);
+            recreate();
+        });
+
+        materialYouSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isProgrammaticChange) return;
+            preferencesManager.setMaterialYou(isChecked);
+            recreate();
+        });
+
+        windowsChip.setOnCheckedChangeListener((buttonView, isChecked) -> savePlatformPreferences());
+        linuxChip.setOnCheckedChangeListener((buttonView, isChecked) -> savePlatformPreferences());
+        macChip.setOnCheckedChangeListener((buttonView, isChecked) -> savePlatformPreferences());
     }
     
     private void loadCurrentSettings() {
@@ -123,24 +150,6 @@ public class SettingsActivity extends BaseActivity {
         String uriPath = preferencesManager.getDownloadUri();
         selectedPath = uriPath;
         
-        // Carregar email do usuário com debug
-        String userEmail = preferencesManager.getUserEmail();
-        String userName = preferencesManager.getUserName();
-        String userId = preferencesManager.getUserId();
-        
-        android.util.Log.d("SettingsActivity", "=== USER DATA FROM PREFERENCES ===");
-        android.util.Log.d("SettingsActivity", "User email: '" + userEmail + "'");
-        android.util.Log.d("SettingsActivity", "User name: '" + userName + "'");
-        android.util.Log.d("SettingsActivity", "User ID: '" + userId + "'");
-        
-        if (userEmail != null && !userEmail.isEmpty()) {
-            android.util.Log.d("SettingsActivity", "Setting email to TextView: '" + userEmail + "'");
-            userEmailText.setText(userEmail);
-        } else {
-            android.util.Log.w("SettingsActivity", "No email found, showing 'Não logado'");
-            userEmailText.setText("Não logado");
-        }
-        
         // Carregar versão do app
         try {
             String versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
@@ -150,8 +159,34 @@ public class SettingsActivity extends BaseActivity {
             android.util.Log.e("SettingsActivity", "Failed to get app version", e);
             appVersionText.setText("Desconhecida");
         }
+
+        // Carregar configurações de aparência
+        isProgrammaticChange = true;
+        dynamicColorSwitch.setChecked(preferencesManager.isDynamicThemingEnabled());
+        materialYouSwitch.setChecked(preferencesManager.isMaterialYouEnabled());
+        isProgrammaticChange = false;
+
+        // Carregar configurações de plataforma
+        java.util.Set<String> selectedPlatforms = preferencesManager.getSelectedPlatforms();
+        windowsChip.setChecked(selectedPlatforms.contains("windows"));
+        linuxChip.setChecked(selectedPlatforms.contains("linux"));
+        macChip.setChecked(selectedPlatforms.contains("mac"));
         
         android.util.Log.d("SettingsActivity", "=== SETTINGS LOADING COMPLETE ===");
+    }
+
+    private void savePlatformPreferences() {
+        java.util.Set<String> selectedPlatforms = new java.util.HashSet<>();
+        if (windowsChip.isChecked()) {
+            selectedPlatforms.add("windows");
+        }
+        if (linuxChip.isChecked()) {
+            selectedPlatforms.add("linux");
+        }
+        if (macChip.isChecked()) {
+            selectedPlatforms.add("mac");
+        }
+        preferencesManager.setSelectedPlatforms(selectedPlatforms);
     }
     
     private void openFolderPicker() {
@@ -192,26 +227,6 @@ public class SettingsActivity extends BaseActivity {
         safPathText.setText(safManager.getDisplayPath());
     }
     
-    private void showLogoutConfirmation() {
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle("Logout")
-                .setMessage("Tem certeza que deseja sair? Todos os dados de login serão removidos.")
-                .setPositiveButton("Sim", (dialog, which) -> performLogout())
-                .setNegativeButton("Cancelar", null)
-                .show();
-    }
-    
-    private void performLogout() {
-        // Limpar dados de autenticação
-        preferencesManager.clearAuthData();
-        
-        // Voltar para tela de login
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
-    }
-    
     private void showClearCacheConfirmation() {
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                 .setTitle("Limpar Cache")
@@ -224,7 +239,7 @@ public class SettingsActivity extends BaseActivity {
     private void clearCache() {
         try {
             // Limpar cache de imagens
-            ImageLoader.getInstance().clearCache();
+            ImageLoader.getInstance(this).clearCache();
             
             // Limpar banco de dados
             databaseHelper.clearAllGames();

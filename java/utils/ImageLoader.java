@@ -15,6 +15,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Collections;
+import java.util.Map;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -25,10 +30,12 @@ public class ImageLoader {
     
     private static ImageLoader instance;
     private LruCache<String, Bitmap> memoryCache;
+    private File diskCacheDir;
     private ExecutorService executorService;
     private Handler mainHandler;
+    private final Map<ImageView, String> imageViewMap = Collections.synchronizedMap(new WeakHashMap<>());
     
-    private ImageLoader() {
+    private ImageLoader(Context context) {
         // Configurar cache de memória
         memoryCache = new LruCache<String, Bitmap>(CACHE_SIZE) {
             @Override
@@ -36,34 +43,39 @@ public class ImageLoader {
                 return bitmap.getByteCount();
             }
         };
+        diskCacheDir = new File(context.getCacheDir(), "images");
+        if (!diskCacheDir.exists()) {
+            diskCacheDir.mkdirs();
+        }
         
         executorService = Executors.newFixedThreadPool(4);
         mainHandler = new Handler(Looper.getMainLooper());
     }
     
-    public static synchronized ImageLoader getInstance() {
+    public static synchronized ImageLoader getInstance(Context context) {
         if (instance == null) {
-            instance = new ImageLoader();
+            instance = new ImageLoader(context.getApplicationContext());
         }
         return instance;
     }
     
     public static void loadImage(Context context, String coverImageUrl, String backgroundImageUrl, ImageView imageView) {
-        getInstance().load(context, coverImageUrl, backgroundImageUrl, imageView);
+        getInstance(context).load(coverImageUrl, backgroundImageUrl, imageView);
     }
 
     public static void loadImage(Context context, String imageUrl, ImageView imageView) {
-        getInstance().load(context, imageUrl, null, imageView);
+        getInstance(context).load(imageUrl, null, imageView);
     }
     
-    public void load(Context context, String coverImageUrl, String backgroundImageUrl, ImageView imageView) {
+    public void load(String coverImageUrl, String backgroundImageUrl, ImageView imageView) {
+        imageViewMap.put(imageView, coverImageUrl);
         Log.d(TAG, "=== LOADING IMAGE ===");
         Log.d(TAG, "Cover URL: '" + coverImageUrl + "'");
         Log.d(TAG, "Background URL: '" + backgroundImageUrl + "'");
 
         if (coverImageUrl == null || coverImageUrl.isEmpty()) {
             if (backgroundImageUrl != null && !backgroundImageUrl.isEmpty()) {
-                load(context, backgroundImageUrl, null, imageView);
+                load(backgroundImageUrl, null, imageView);
             } else {
                 Log.w(TAG, "Image URLs are empty, using placeholder");
                 imageView.setImageResource(android.R.drawable.ic_menu_gallery);
@@ -71,10 +83,10 @@ public class ImageLoader {
             return;
         }
         
-        // Verificar cache primeiro
+        // Verificar cache de memória primeiro
         Bitmap cachedBitmap = memoryCache.get(coverImageUrl);
         if (cachedBitmap != null) {
-            Log.d(TAG, "Image found in cache: " + coverImageUrl);
+            Log.d(TAG, "Image found in memory cache: " + coverImageUrl);
             imageView.setImageBitmap(cachedBitmap);
             return;
         }
@@ -84,31 +96,48 @@ public class ImageLoader {
         imageView.setImageResource(android.R.drawable.ic_menu_gallery);
         
         // Carregar imagem em background
-        Log.d(TAG, "Starting background download for: " + coverImageUrl);
+        Log.d(TAG, "Starting background loading for: " + coverImageUrl);
         executorService.execute(() -> {
+            // Verificar cache em disco
+            Bitmap bitmap = getBitmapFromDiskCache(coverImageUrl);
+            if (bitmap != null) {
+                Log.d(TAG, "Image found in disk cache: " + coverImageUrl);
+                memoryCache.put(coverImageUrl, bitmap);
+                final Bitmap finalBitmap = bitmap;
+                mainHandler.post(() -> {
+                    if (coverImageUrl.equals(imageViewMap.get(imageView))) {
+                        imageView.setImageBitmap(finalBitmap);
+                    }
+                });
+                return;
+            }
+
             try {
                 Log.d(TAG, "Downloading bitmap: " + coverImageUrl);
-                Bitmap bitmap = downloadBitmap(coverImageUrl);
-                if (bitmap != null) {
+                final Bitmap downloadedBitmap = downloadBitmap(coverImageUrl);
+                if (downloadedBitmap != null) {
                     Log.d(TAG, "Bitmap downloaded successfully: " + coverImageUrl);
-                    // Adicionar ao cache
-                    memoryCache.put(coverImageUrl, bitmap);
+                    // Adicionar aos caches
+                    memoryCache.put(coverImageUrl, downloadedBitmap);
+                    addBitmapToDiskCache(coverImageUrl, downloadedBitmap);
                     
                     // Atualizar UI na thread principal
                     mainHandler.post(() -> {
-                        Log.d(TAG, "Setting bitmap to ImageView: " + coverImageUrl);
-                        imageView.setImageBitmap(bitmap);
+                        if (coverImageUrl.equals(imageViewMap.get(imageView))) {
+                            Log.d(TAG, "Setting bitmap to ImageView: " + coverImageUrl);
+                            imageView.setImageBitmap(downloadedBitmap);
+                        }
                     });
                 } else {
                     Log.e(TAG, "Failed to download bitmap: " + coverImageUrl);
                     if (backgroundImageUrl != null && !backgroundImageUrl.isEmpty()) {
-                        load(context, backgroundImageUrl, null, imageView);
+                        load(backgroundImageUrl, null, imageView);
                     }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error loading image: " + coverImageUrl, e);
                 if (backgroundImageUrl != null && !backgroundImageUrl.isEmpty()) {
-                    load(context, backgroundImageUrl, null, imageView);
+                    load(backgroundImageUrl, null, imageView);
                 }
             }
         });
@@ -253,5 +282,24 @@ public class ImageLoader {
         if (executorService != null && !executorService.isShutdown()) {
             executorService.shutdown();
         }
+    }
+
+    private void addBitmapToDiskCache(String url, Bitmap bitmap) {
+        try {
+            File file = new File(diskCacheDir, String.valueOf(url.hashCode()));
+            FileOutputStream fos = new FileOutputStream(file);
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
+            fos.close();
+        } catch (IOException e) {
+            Log.e(TAG, "Error adding bitmap to disk cache", e);
+        }
+    }
+
+    private Bitmap getBitmapFromDiskCache(String url) {
+        File file = new File(diskCacheDir, String.valueOf(url.hashCode()));
+        if (file.exists()) {
+            return BitmapFactory.decodeFile(file.getAbsolutePath());
+        }
+        return null;
     }
 }
