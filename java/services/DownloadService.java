@@ -463,6 +463,14 @@ public class DownloadService extends Service {
 
     private void pauseDownload(long gameId) {
         Log.d(TAG, "Pausing download for game ID: " + gameId);
+
+        Game game = databaseHelper.getGame(gameId);
+        if (game != null) {
+            game.setStatus(Game.DownloadStatus.PAUSED);
+            databaseHelper.updateGame(game);
+            onDownloadPaused(game);
+        }
+
         DownloadTask task = activeDownloads.get(gameId);
         if (task != null) {
             task.pause();
