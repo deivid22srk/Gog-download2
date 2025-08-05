@@ -131,9 +131,9 @@ public class SettingsActivity extends BaseActivity {
             recreate();
         });
 
-        platformChipGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            savePlatformPreferences();
-        });
+        windowsChip.setOnCheckedChangeListener((buttonView, isChecked) -> savePlatformPreferences());
+        linuxChip.setOnCheckedChangeListener((buttonView, isChecked) -> savePlatformPreferences());
+        macChip.setOnCheckedChangeListener((buttonView, isChecked) -> savePlatformPreferences());
     }
     
     private void loadCurrentSettings() {
