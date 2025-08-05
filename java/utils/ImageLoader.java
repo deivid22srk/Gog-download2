@@ -99,13 +99,14 @@ public class ImageLoader {
         Log.d(TAG, "Starting background loading for: " + coverImageUrl);
         executorService.execute(() -> {
             // Verificar cache em disco
-            final Bitmap[] bitmap = {getBitmapFromDiskCache(coverImageUrl)};
-            if (bitmap[0] != null) {
+            Bitmap bitmap = getBitmapFromDiskCache(coverImageUrl);
+            if (bitmap != null) {
                 Log.d(TAG, "Image found in disk cache: " + coverImageUrl);
-                memoryCache.put(coverImageUrl, bitmap[0]);
+                memoryCache.put(coverImageUrl, bitmap);
+                final Bitmap finalBitmap = bitmap;
                 mainHandler.post(() -> {
                     if (coverImageUrl.equals(imageViewMap.get(imageView))) {
-                        imageView.setImageBitmap(bitmap[0]);
+                        imageView.setImageBitmap(finalBitmap);
                     }
                 });
                 return;
@@ -113,18 +114,18 @@ public class ImageLoader {
 
             try {
                 Log.d(TAG, "Downloading bitmap: " + coverImageUrl);
-                bitmap = downloadBitmap(coverImageUrl);
-                if (bitmap != null) {
+                final Bitmap downloadedBitmap = downloadBitmap(coverImageUrl);
+                if (downloadedBitmap != null) {
                     Log.d(TAG, "Bitmap downloaded successfully: " + coverImageUrl);
                     // Adicionar aos caches
-                    memoryCache.put(coverImageUrl, bitmap);
-                    addBitmapToDiskCache(coverImageUrl, bitmap);
+                    memoryCache.put(coverImageUrl, downloadedBitmap);
+                    addBitmapToDiskCache(coverImageUrl, downloadedBitmap);
                     
                     // Atualizar UI na thread principal
                     mainHandler.post(() -> {
                         if (coverImageUrl.equals(imageViewMap.get(imageView))) {
                             Log.d(TAG, "Setting bitmap to ImageView: " + coverImageUrl);
-                            imageView.setImageBitmap(bitmap);
+                            imageView.setImageBitmap(downloadedBitmap);
                         }
                     });
                 } else {
