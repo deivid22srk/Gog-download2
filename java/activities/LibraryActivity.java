@@ -116,8 +116,8 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         
         initializeManagers(); // Initialize managers first to access preferences
 
-        // Check if folders are selected
-        if (!preferencesManager.hasDownloadLocationConfigured()) {
+        // Check if folders are selected and permissions are granted
+        if (!preferencesManager.hasDownloadLocationConfigured() || !permissionHelper.hasAllEssentialPermissions()) {
             Intent intent = new Intent(this, FolderSelectionActivity.class);
             startActivity(intent);
             finish();
