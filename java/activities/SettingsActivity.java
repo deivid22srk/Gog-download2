@@ -17,6 +17,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
+import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.termux.R;
 import com.termux.database.DatabaseHelper;
 import com.termux.utils.ImageLoader;
@@ -27,12 +28,12 @@ import java.io.File;
 
 public class SettingsActivity extends BaseActivity {
     
-    private TextView userEmailText;
     private TextView appVersionText;
     private TextView safPathText;
     private Button changeSafFolderButton;
-    private Button logoutButton;
     private Button clearCacheButton;
+    private SwitchMaterial dynamicColorSwitch;
+    private SwitchMaterial materialYouSwitch;
     
     private PreferencesManager preferencesManager;
     private DatabaseHelper databaseHelper;
@@ -64,12 +65,12 @@ public class SettingsActivity extends BaseActivity {
     }
     
     private void initializeViews() {
-        userEmailText = findViewById(R.id.userEmailText);
         appVersionText = findViewById(R.id.appVersionText);
         safPathText = findViewById(R.id.safPathText);
         changeSafFolderButton = findViewById(R.id.changeSafFolderButton);
-        logoutButton = findViewById(R.id.logoutButton);
         clearCacheButton = findViewById(R.id.clearCacheButton);
+        dynamicColorSwitch = findViewById(R.id.dynamicColorSwitch);
+        materialYouSwitch = findViewById(R.id.materialYouSwitch);
     }
     
     private void initializeManagers() {
@@ -105,8 +106,17 @@ public class SettingsActivity extends BaseActivity {
     
     private void setupClickListeners() {
         changeSafFolderButton.setOnClickListener(v -> openFolderPicker());
-        logoutButton.setOnClickListener(v -> showLogoutConfirmation());
         clearCacheButton.setOnClickListener(v -> showClearCacheConfirmation());
+
+        dynamicColorSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            preferencesManager.setDynamicTheming(isChecked);
+            recreate();
+        });
+
+        materialYouSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            preferencesManager.setMaterialYou(isChecked);
+            recreate();
+        });
     }
     
     private void loadCurrentSettings() {
@@ -123,24 +133,6 @@ public class SettingsActivity extends BaseActivity {
         String uriPath = preferencesManager.getDownloadUri();
         selectedPath = uriPath;
         
-        // Carregar email do usuário com debug
-        String userEmail = preferencesManager.getUserEmail();
-        String userName = preferencesManager.getUserName();
-        String userId = preferencesManager.getUserId();
-        
-        android.util.Log.d("SettingsActivity", "=== USER DATA FROM PREFERENCES ===");
-        android.util.Log.d("SettingsActivity", "User email: '" + userEmail + "'");
-        android.util.Log.d("SettingsActivity", "User name: '" + userName + "'");
-        android.util.Log.d("SettingsActivity", "User ID: '" + userId + "'");
-        
-        if (userEmail != null && !userEmail.isEmpty()) {
-            android.util.Log.d("SettingsActivity", "Setting email to TextView: '" + userEmail + "'");
-            userEmailText.setText(userEmail);
-        } else {
-            android.util.Log.w("SettingsActivity", "No email found, showing 'Não logado'");
-            userEmailText.setText("Não logado");
-        }
-        
         // Carregar versão do app
         try {
             String versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
@@ -150,6 +142,10 @@ public class SettingsActivity extends BaseActivity {
             android.util.Log.e("SettingsActivity", "Failed to get app version", e);
             appVersionText.setText("Desconhecida");
         }
+
+        // Carregar configurações de aparência
+        dynamicColorSwitch.setChecked(preferencesManager.isDynamicThemingEnabled());
+        materialYouSwitch.setChecked(preferencesManager.isMaterialYouEnabled());
         
         android.util.Log.d("SettingsActivity", "=== SETTINGS LOADING COMPLETE ===");
     }
@@ -190,26 +186,6 @@ public class SettingsActivity extends BaseActivity {
     private void updatePathDisplay() {
         SAFDownloadManager safManager = new SAFDownloadManager(this);
         safPathText.setText(safManager.getDisplayPath());
-    }
-    
-    private void showLogoutConfirmation() {
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle("Logout")
-                .setMessage("Tem certeza que deseja sair? Todos os dados de login serão removidos.")
-                .setPositiveButton("Sim", (dialog, which) -> performLogout())
-                .setNegativeButton("Cancelar", null)
-                .show();
-    }
-    
-    private void performLogout() {
-        // Limpar dados de autenticação
-        preferencesManager.clearAuthData();
-        
-        // Voltar para tela de login
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
     }
     
     private void showClearCacheConfirmation() {

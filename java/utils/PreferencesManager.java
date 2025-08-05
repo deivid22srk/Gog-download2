@@ -18,6 +18,8 @@ public class PreferencesManager {
     private static final String KEY_DOWNLOAD_PATH = "download_path";
     private static final String KEY_FIRST_RUN = "first_run";
     private static final String KEY_LOGIN_TIME = "login_time";
+    private static final String KEY_DYNAMIC_THEMING = "dynamic_theming";
+    private static final String KEY_MATERIAL_YOU = "material_you";
     
     private SharedPreferences preferences;
     private SharedPreferences.Editor editor;
@@ -122,6 +124,25 @@ public class PreferencesManager {
         long oneHour = 60 * 60 * 1000; // 1 hora em milliseconds
         
         return (currentTime - loginTime) < oneHour;
+    }
+
+    // Métodos de aparência
+    public void setDynamicTheming(boolean enabled) {
+        editor.putBoolean(KEY_DYNAMIC_THEMING, enabled);
+        editor.apply();
+    }
+
+    public boolean isDynamicThemingEnabled() {
+        return preferences.getBoolean(KEY_DYNAMIC_THEMING, true); // Default to true
+    }
+
+    public void setMaterialYou(boolean enabled) {
+        editor.putBoolean(KEY_MATERIAL_YOU, enabled);
+        editor.apply();
+    }
+
+    public boolean isMaterialYouEnabled() {
+        return preferences.getBoolean(KEY_MATERIAL_YOU, true); // Default to true
     }
     
     // Métodos de download com SAF

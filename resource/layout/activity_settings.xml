@@ -75,7 +75,7 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Account Settings Section -->
+            <!-- Appearance Section -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -90,46 +90,27 @@
                     <com.google.android.material.textview.MaterialTextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Conta"
+                        android:text="Aparência"
                         android:textAppearance="?attr/textAppearanceTitleLarge"
                         android:layout_marginBottom="16dp" />
 
-                    <!-- User Email -->
-                    <LinearLayout
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/dynamicColorSwitch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginBottom="12dp">
+                        android:text="Cor Dinâmica"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:layout_marginBottom="8dp" />
 
-                        <com.google.android.material.textview.MaterialTextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="Email:"
-                            android:textAppearance="?attr/textAppearanceBodyMedium" />
-
-                        <com.google.android.material.textview.MaterialTextView
-                            android:id="@+id/userEmailText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="usuario@email.com"
-                            android:textAppearance="?attr/textAppearanceBodyMedium"
-                            android:textColor="?attr/colorOnSurfaceVariant" />
-
-                    </LinearLayout>
-
-                    <!-- Logout Button -->
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/logoutButton"
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/materialYouSwitch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/logout"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_marginTop="8dp" />
+                        android:text="Material You"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:layout_marginBottom="8dp" />
 
                 </LinearLayout>
-
             </com.google.android.material.card.MaterialCardView>
 
             <!-- App Settings Section -->
@@ -188,15 +169,6 @@
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>
-
-            <!-- Save Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/saveButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/save_settings"
-                style="@style/Widget.Material3.Button"
-                android:layout_marginTop="16dp" />
 
         </LinearLayout>
 
