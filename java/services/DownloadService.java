@@ -245,8 +245,10 @@ public class DownloadService extends Service {
         }
         
         if (httpClient != null) {
-            httpClient.dispatcher().executorService().shutdown();
-            httpClient.connectionPool().evictAll();
+            new Thread(() -> {
+                httpClient.dispatcher().executorService().shutdown();
+                httpClient.connectionPool().evictAll();
+            }).start();
         }
         
         if (databaseHelper != null) {
