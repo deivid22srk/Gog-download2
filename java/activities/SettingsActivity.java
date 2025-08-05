@@ -40,6 +40,7 @@ public class SettingsActivity extends BaseActivity {
     
     private ActivityResultLauncher<Intent> folderPickerLauncher;
     private String selectedPath;
+    private boolean isProgrammaticChange = false;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -109,11 +110,13 @@ public class SettingsActivity extends BaseActivity {
         clearCacheButton.setOnClickListener(v -> showClearCacheConfirmation());
 
         dynamicColorSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isProgrammaticChange) return;
             preferencesManager.setDynamicTheming(isChecked);
             recreate();
         });
 
         materialYouSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isProgrammaticChange) return;
             preferencesManager.setMaterialYou(isChecked);
             recreate();
         });
@@ -144,8 +147,10 @@ public class SettingsActivity extends BaseActivity {
         }
 
         // Carregar configurações de aparência
+        isProgrammaticChange = true;
         dynamicColorSwitch.setChecked(preferencesManager.isDynamicThemingEnabled());
         materialYouSwitch.setChecked(preferencesManager.isMaterialYouEnabled());
+        isProgrammaticChange = false;
         
         android.util.Log.d("SettingsActivity", "=== SETTINGS LOADING COMPLETE ===");
     }
