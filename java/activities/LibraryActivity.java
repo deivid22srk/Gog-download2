@@ -38,7 +38,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
@@ -264,7 +264,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         gamesAdapter = new GamesAdapter(this);
         gamesAdapter.setOnGameActionListener(this);
         
-        gamesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        gamesRecyclerView.setLayoutManager(new GridLayoutManager(this, 2));
         gamesRecyclerView.setAdapter(gamesAdapter);
     }
     
@@ -1261,63 +1261,12 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     
     @Override
     public void onOpenGame(Game game) {
-        // Mostrar informações do jogo baixado ou abrir pasta
-        if (game.getLocalPath() != null && !game.getLocalPath().isEmpty()) {
-            showGameDetails(game);
-        }
+        // TODO: Implement a proper game details screen
     }
     
     @Override
     public void onGameClick(Game game) {
-        showGameDetails(game);
-    }
-    
-    private void showGameDetails(Game game) {
-        // Criar dialog com detalhes do jogo
-        com.google.android.material.dialog.MaterialAlertDialogBuilder builder = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this);
-        builder.setTitle(game.getTitle());
-        
-        StringBuilder details = new StringBuilder();
-        
-        if (game.getDeveloper() != null) {
-            details.append("Desenvolvedor: ").append(game.getDeveloper()).append("\n");
-        }
-        
-        if (game.getPublisher() != null) {
-            details.append("Publisher: ").append(game.getPublisher()).append("\n");
-        }
-        
-        if (!game.getGenres().isEmpty()) {
-            details.append("Gêneros: ").append(game.getGenresString()).append("\n");
-        }
-        
-        if (game.getTotalSize() > 0) {
-            details.append("Tamanho: ").append(game.getFormattedSize()).append("\n");
-        }
-        
-        details.append("Status: ");
-        switch (game.getStatus()) {
-            case NOT_DOWNLOADED:
-                details.append("Não baixado");
-                break;
-            case DOWNLOADING:
-                details.append("Baixando... ").append(game.getDownloadProgressPercent()).append("%");
-                break;
-            case DOWNLOADED:
-                details.append("Baixado");
-                break;
-            case FAILED:
-                details.append("Falha no download");
-                break;
-        }
-        
-        if (game.getLocalPath() != null && !game.getLocalPath().isEmpty()) {
-            details.append("\nLocal: ").append(game.getLocalPath());
-        }
-        
-        builder.setMessage(details.toString());
-        builder.setPositiveButton("OK", null);
-        builder.show();
+        // TODO: Implement a proper game details screen
     }
     
     /**
