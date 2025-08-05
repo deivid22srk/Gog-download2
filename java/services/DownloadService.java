@@ -1091,16 +1091,7 @@ public class DownloadService extends Service {
             
             long totalBatchDownloaded = fileProgress.values().stream().mapToLong(Long::longValue).sum();
             
-            double overallSpeed = 0;
-            for (DownloadTask task : childTasks) {
-                overallSpeed += task.speedMeter.getCurrentSpeed();
-            }
-
-            long overallEta = (totalBatchSizeBytes - totalBatchDownloaded > 0 && overallSpeed > 0)
-                ? (long) ((totalBatchSizeBytes - totalBatchDownloaded) / overallSpeed)
-                : 0;
-
-            onDownloadProgress(game, totalBatchDownloaded, totalBatchSizeBytes, completedFileCount.get(), downloadLinks.size(), overallSpeed, overallEta);
+            onDownloadProgress(game, totalBatchDownloaded, totalBatchSizeBytes, completedFileCount.get(), downloadLinks.size(), 0, 0);
         }
 
         private String getUrl(DownloadLink link) throws InterruptedException {
