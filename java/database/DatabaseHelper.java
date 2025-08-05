@@ -627,4 +627,71 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             return null;
         }
     }
+
+    // Métodos para gerenciar segmentos de download
+
+    public void createDownloadSegments(long downloadId, long totalSize, int segmentCount) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            long segmentSize = totalSize / segmentCount;
+            for (int i = 0; i < segmentCount; i++) {
+                ContentValues values = new ContentValues();
+                values.put(COLUMN_SEGMENT_DOWNLOAD_ID, downloadId);
+                values.put(COLUMN_SEGMENT_INDEX, i);
+                long startByte = i * segmentSize;
+                long endByte = (i == segmentCount - 1) ? totalSize - 1 : startByte + segmentSize - 1;
+                values.put(COLUMN_SEGMENT_START_BYTE, startByte);
+                values.put(COLUMN_SEGMENT_END_BYTE, endByte);
+                values.put(COLUMN_SEGMENT_DOWNLOADED_BYTES, 0);
+                values.put(COLUMN_SEGMENT_STATUS, "PENDING");
+                db.insert(TABLE_DOWNLOAD_SEGMENTS, null, values);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    public List<ContentValues> getDownloadSegments(long downloadId) {
+        List<ContentValues> segments = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.query(TABLE_DOWNLOAD_SEGMENTS, null,
+                COLUMN_SEGMENT_DOWNLOAD_ID + " = ?", new String[]{String.valueOf(downloadId)},
+                null, null, COLUMN_SEGMENT_INDEX + " ASC");
+
+        if (cursor != null) {
+            while (cursor.moveToNext()) {
+                ContentValues values = new ContentValues();
+                values.put("id", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_ID)));
+                values.put("download_id", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_DOWNLOAD_ID)));
+                values.put("segment_index", cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_INDEX)));
+                values.put("start_byte", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_START_BYTE)));
+                values.put("end_byte", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_END_BYTE)));
+                values.put("downloaded_bytes", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_DOWNLOADED_BYTES)));
+                values.put("status", cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_STATUS)));
+                segments.add(values);
+            }
+            cursor.close();
+        }
+        return segments;
+    }
+
+    public boolean updateSegmentProgress(long segmentId, long downloadedBytes) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_SEGMENT_DOWNLOADED_BYTES, downloadedBytes);
+        int rowsAffected = db.update(TABLE_DOWNLOAD_SEGMENTS, values,
+                COLUMN_SEGMENT_ID + " = ?", new String[]{String.valueOf(segmentId)});
+        return rowsAffected > 0;
+    }
+
+    public boolean updateSegmentStatus(long segmentId, String status) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_SEGMENT_STATUS, status);
+        int rowsAffected = db.update(TABLE_DOWNLOAD_SEGMENTS, values,
+                COLUMN_SEGMENT_ID + " = ?", new String[]{String.valueOf(segmentId)});
+        return rowsAffected > 0;
+    }
 }
