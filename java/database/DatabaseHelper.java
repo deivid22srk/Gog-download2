@@ -23,7 +23,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     
     // Database info
     private static final String DATABASE_NAME = "gog_downloader.db";
-    private static final int DATABASE_VERSION = 3; // Adicionar links JSON para batches
+    private static final int DATABASE_VERSION = 4; // Adicionar download segmentado
     
     // Table names
     private static final String TABLE_GAMES = "games";
@@ -133,6 +133,29 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             "FOREIGN KEY(" + COLUMN_BATCH_GAME_ID + ") REFERENCES " +
                 TABLE_GAMES + "(" + COLUMN_GAME_ID + ")" +
         ")";
+
+    // Segments table
+    private static final String TABLE_DOWNLOAD_SEGMENTS = "download_segments";
+    private static final String COLUMN_SEGMENT_ID = "id";
+    private static final String COLUMN_SEGMENT_DOWNLOAD_ID = "download_id";
+    private static final String COLUMN_SEGMENT_INDEX = "segment_index";
+    private static final String COLUMN_SEGMENT_START_BYTE = "start_byte";
+    private static final String COLUMN_SEGMENT_END_BYTE = "end_byte";
+    private static final String COLUMN_SEGMENT_DOWNLOADED_BYTES = "downloaded_bytes";
+    private static final String COLUMN_SEGMENT_STATUS = "status";
+
+    private static final String CREATE_TABLE_DOWNLOAD_SEGMENTS =
+        "CREATE TABLE " + TABLE_DOWNLOAD_SEGMENTS + " (" +
+            COLUMN_SEGMENT_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+            COLUMN_SEGMENT_DOWNLOAD_ID + " INTEGER NOT NULL, " +
+            COLUMN_SEGMENT_INDEX + " INTEGER NOT NULL, " +
+            COLUMN_SEGMENT_START_BYTE + " INTEGER NOT NULL, " +
+            COLUMN_SEGMENT_END_BYTE + " INTEGER NOT NULL, " +
+            COLUMN_SEGMENT_DOWNLOADED_BYTES + " INTEGER DEFAULT 0, " +
+            COLUMN_SEGMENT_STATUS + " TEXT DEFAULT 'PENDING', " +
+            "FOREIGN KEY(" + COLUMN_SEGMENT_DOWNLOAD_ID + ") REFERENCES " +
+                TABLE_DOWNLOADS + "(" + COLUMN_DOWNLOAD_ID + ") ON DELETE CASCADE" +
+        ")";
     
     public DatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -143,6 +166,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(CREATE_GAMES_TABLE);
         db.execSQL(CREATE_DOWNLOADS_TABLE);
         db.execSQL(CREATE_DOWNLOAD_BATCHES_TABLE);
+        db.execSQL(CREATE_TABLE_DOWNLOAD_SEGMENTS);
         
         // Criar índices para melhor performance
         db.execSQL("CREATE INDEX idx_games_status ON " + TABLE_GAMES + "(" + COLUMN_GAME_STATUS + ")");
@@ -151,6 +175,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL("CREATE INDEX idx_downloads_link_id ON " + TABLE_DOWNLOADS + "(" + COLUMN_DOWNLOAD_LINK_ID + ")");
         db.execSQL("CREATE INDEX idx_batches_game_id ON " + TABLE_DOWNLOAD_BATCHES + "(" + COLUMN_BATCH_GAME_ID + ")");
         db.execSQL("CREATE INDEX idx_batches_status ON " + TABLE_DOWNLOAD_BATCHES + "(" + COLUMN_BATCH_STATUS + ")");
+        db.execSQL("CREATE INDEX idx_segments_download_id ON " + TABLE_DOWNLOAD_SEGMENTS + "(download_id)");
     }
     
     @Override
@@ -172,6 +197,12 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // Migração da versão 2 para 3: adicionar links_json aos batches
             db.execSQL("ALTER TABLE " + TABLE_DOWNLOAD_BATCHES + " ADD COLUMN " + COLUMN_BATCH_LINKS_JSON + " TEXT;");
             Log.d(TAG, "Database upgraded successfully to version 3");
+        }
+        if (oldVersion < 4) {
+            // Migração da versão 3 para 4: adicionar tabela de segmentos
+            db.execSQL(CREATE_TABLE_DOWNLOAD_SEGMENTS);
+            db.execSQL("CREATE INDEX idx_segments_download_id ON " + TABLE_DOWNLOAD_SEGMENTS + "(download_id)");
+            Log.d(TAG, "Database upgraded successfully to version 4");
         }
     }
     
@@ -492,6 +523,74 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
         
         return batch;
+    }
+
+    // Métodos para gerenciar segmentos de download
+
+    public void createDownloadSegments(long downloadId, long totalSize, int segmentCount) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            long segmentSize = totalSize / segmentCount;
+            for (int i = 0; i < segmentCount; i++) {
+                ContentValues values = new ContentValues();
+                values.put(COLUMN_SEGMENT_DOWNLOAD_ID, downloadId);
+                values.put(COLUMN_SEGMENT_INDEX, i);
+                long startByte = i * segmentSize;
+                long endByte = (i == segmentCount - 1) ? totalSize - 1 : startByte + segmentSize - 1;
+                values.put(COLUMN_SEGMENT_START_BYTE, startByte);
+                values.put(COLUMN_SEGMENT_END_BYTE, endByte);
+                values.put(COLUMN_SEGMENT_DOWNLOADED_BYTES, 0);
+                values.put(COLUMN_SEGMENT_STATUS, "PENDING");
+                db.insert(TABLE_DOWNLOAD_SEGMENTS, null, values);
+            }
+            db.setTransactionSuccessful();
+            Log.d(TAG, "Created " + segmentCount + " segments for download ID: " + downloadId);
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    public List<ContentValues> getDownloadSegments(long downloadId) {
+        List<ContentValues> segments = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.query(TABLE_DOWNLOAD_SEGMENTS, null,
+                COLUMN_SEGMENT_DOWNLOAD_ID + " = ?", new String[]{String.valueOf(downloadId)},
+                null, null, COLUMN_SEGMENT_INDEX + " ASC");
+
+        if (cursor != null) {
+            while (cursor.moveToNext()) {
+                ContentValues values = new ContentValues();
+                values.put("id", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_ID)));
+                values.put("download_id", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_DOWNLOAD_ID)));
+                values.put("segment_index", cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_INDEX)));
+                values.put("start_byte", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_START_BYTE)));
+                values.put("end_byte", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_END_BYTE)));
+                values.put("downloaded_bytes", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_DOWNLOADED_BYTES)));
+                values.put("status", cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_STATUS)));
+                segments.add(values);
+            }
+            cursor.close();
+        }
+        return segments;
+    }
+
+    public boolean updateSegmentProgress(long segmentId, long downloadedBytes) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_SEGMENT_DOWNLOADED_BYTES, downloadedBytes);
+        int rowsAffected = db.update(TABLE_DOWNLOAD_SEGMENTS, values,
+                COLUMN_SEGMENT_ID + " = ?", new String[]{String.valueOf(segmentId)});
+        return rowsAffected > 0;
+    }
+
+    public boolean updateSegmentStatus(long segmentId, String status) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_SEGMENT_STATUS, status);
+        int rowsAffected = db.update(TABLE_DOWNLOAD_SEGMENTS, values,
+                COLUMN_SEGMENT_ID + " = ?", new String[]{String.valueOf(segmentId)});
+        return rowsAffected > 0;
     }
     
     public boolean deleteGame(long gameId) {

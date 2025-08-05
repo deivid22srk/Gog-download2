@@ -279,6 +279,20 @@ public class SAFDownloadManager {
         
         return gameDir.listFiles();
     }
+
+    public DocumentFile createTempSegmentFile(Game game, DownloadLink downloadLink, int segmentIndex) {
+        DocumentFile gameDir = createGameDirectory(game);
+        if (gameDir == null) return null;
+
+        String tempFileName = sanitizeFileName(downloadLink.getFileName() + ".part" + segmentIndex);
+
+        DocumentFile existingFile = gameDir.findFile(tempFileName);
+        if (existingFile != null) {
+            return existingFile;
+        }
+
+        return gameDir.createFile("application/octet-stream", tempFileName);
+    }
     
     /**
      * Obtém o caminho de exibição para o usuário
