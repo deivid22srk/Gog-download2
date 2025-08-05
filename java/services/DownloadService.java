@@ -771,7 +771,7 @@ public class DownloadService extends Service {
         void onComplete(String linkId, boolean success, String filePath);
     }
 
-    private class SegmentDownloadTask implements Runnable {
+    private class SegmentDownloadTask implements java.util.concurrent.Callable<Boolean> {
         private final Game game;
         private final DownloadLink downloadLink;
         private final long downloadId;
@@ -792,29 +792,27 @@ public class DownloadService extends Service {
         public void pause() { this.paused = true; }
 
         @Override
-        public void run() {
-            try {
-                downloadSegmentWithRetries();
-            } catch (IOException e) {
-                Log.e(TAG, "Segment download failed permanently.", e);
-            }
-        }
-
-        private void downloadSegmentWithRetries() throws IOException {
+        public Boolean call() throws IOException {
             long segmentId = segment.getAsLong("id");
+            Log.d(TAG, "Segment task " + segmentId + " started.");
             databaseHelper.updateSegmentStatus(segmentId, "DOWNLOADING");
             Exception lastException = null;
             final int MAX_RETRIES = 3;
             long retryDelay = 2000;
 
             for (int i = 0; i < MAX_RETRIES; i++) {
-                if (paused || cancelled) break;
+                if (paused || cancelled) {
+                    Log.d(TAG, "Segment " + segmentId + " paused or cancelled before attempt " + (i+1));
+                    return false;
+                }
 
                 try {
                     int segmentIndex = segment.getAsInteger("segment_index");
                     long startByte = segment.getAsLong("start_byte");
                     long endByte = segment.getAsLong("end_byte");
                     long downloadedBytes = databaseHelper.getDownloadSegments(downloadId).get(segmentIndex).getAsLong("downloaded_bytes");
+
+                    Log.d(TAG, "Segment " + segmentId + " attempt " + (i+1) + ": downloading range " + (startByte + downloadedBytes) + "-" + endByte);
 
                     DocumentFile segmentFile = safDownloadManager.createTempSegmentFile(game, downloadLink, segmentIndex);
                     if (segmentFile == null) throw new IOException("Failed to create segment file.");
@@ -846,10 +844,14 @@ public class DownloadService extends Service {
                                 databaseHelper.updateSegmentProgress(segmentId, currentDownloadedBytes);
                             }
 
-                            if (paused || cancelled) return;
+                            if (paused || cancelled) {
+                                Log.d(TAG, "Segment " + segmentId + " paused or cancelled during download.");
+                                return false;
+                            }
 
                             databaseHelper.updateSegmentStatus(segmentId, "COMPLETED");
-                            return;
+                            Log.d(TAG, "Segment " + segmentId + " completed successfully.");
+                            return true;
                         }
                     }
                 } catch (IOException e) {
@@ -908,37 +910,48 @@ public class DownloadService extends Service {
 
         @Override
         public void run() {
+            Log.d(TAG, "Master task started for downloadId: " + downloadId);
             if (downloadId != -1) {
                 databaseHelper.updateDownloadStatus(downloadId, "DOWNLOADING", null);
             }
 
             try {
+                Log.d(TAG, "Getting total size for " + downloadLink.getFileName());
                 long totalSize = getTotalSize();
                 if (totalSize <= 0) throw new IOException("Could not determine file size.");
+                Log.d(TAG, "Total size is: " + totalSize);
                 downloadLink.setSize(totalSize);
                 databaseHelper.updateDownloadProgress(downloadId, 0, totalSize, 0, 0);
 
+                Log.d(TAG, "Creating segments in DB...");
                 databaseHelper.createDownloadSegments(downloadId, totalSize, SEGMENT_COUNT);
                 List<ContentValues> segments = databaseHelper.getDownloadSegments(downloadId);
+                Log.d(TAG, "Created " + segments.size() + " segments.");
 
                 ExecutorCompletionService<Boolean> completionService = new ExecutorCompletionService<>(executorService);
+                Log.d(TAG, "Submitting segment tasks...");
                 for (ContentValues segment : segments) {
                     SegmentDownloadTask task = new SegmentDownloadTask(game, downloadLink, downloadId, downloadLink.getDownloadUrl(), segment);
                     segmentTasks.add(task);
-                    completionService.submit(task, true);
+                    completionService.submit(task);
                 }
+                Log.d(TAG, "All segment tasks submitted.");
 
                 int successCount = 0;
                 for (int i = 0; i < segments.size(); i++) {
                     try {
+                        Log.d(TAG, "Waiting for a segment to complete... (" + (i + 1) + "/" + segments.size() + ")");
                         Future<Boolean> result = completionService.take();
-                        result.get();
-                        successCount++;
+                        if (result.get()) {
+                            successCount++;
+                            Log.d(TAG, "A segment completed successfully. Total success: " + successCount);
+                        }
                     } catch (Exception e) {
                         Log.e(TAG, "A segment failed to complete", e);
                     }
                 }
 
+                Log.d(TAG, "All segments finished. Success count: " + successCount);
                 if (successCount == SEGMENT_COUNT) {
                     String finalPath = assembleParts();
                     if (listener != null) {
