@@ -99,13 +99,13 @@ public class ImageLoader {
         Log.d(TAG, "Starting background loading for: " + coverImageUrl);
         executorService.execute(() -> {
             // Verificar cache em disco
-            Bitmap bitmap = getBitmapFromDiskCache(coverImageUrl);
-            if (bitmap != null) {
+            final Bitmap[] bitmap = {getBitmapFromDiskCache(coverImageUrl)};
+            if (bitmap[0] != null) {
                 Log.d(TAG, "Image found in disk cache: " + coverImageUrl);
-                memoryCache.put(coverImageUrl, bitmap);
+                memoryCache.put(coverImageUrl, bitmap[0]);
                 mainHandler.post(() -> {
                     if (coverImageUrl.equals(imageViewMap.get(imageView))) {
-                        imageView.setImageBitmap(bitmap);
+                        imageView.setImageBitmap(bitmap[0]);
                     }
                 });
                 return;

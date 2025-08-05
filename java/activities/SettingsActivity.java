@@ -239,7 +239,7 @@ public class SettingsActivity extends BaseActivity {
     private void clearCache() {
         try {
             // Limpar cache de imagens
-            ImageLoader.getInstance().clearCache();
+            ImageLoader.getInstance(this).clearCache();
             
             // Limpar banco de dados
             databaseHelper.clearAllGames();
