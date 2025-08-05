@@ -221,7 +221,7 @@ public class GamesAdapter extends RecyclerView.Adapter<GamesAdapter.GameViewHold
             Game game = filteredGames.get(position);
 
             PopupMenu popup = new PopupMenu(context, view);
-            popup.inflate(R.menu.menu_library); // Create a menu for this
+            popup.inflate(R.menu.menu_game_actions);
             
             // Customize menu based on game status
             // For now, we show all options
