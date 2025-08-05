@@ -17,6 +17,8 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.termux.R;
 import com.termux.database.DatabaseHelper;
@@ -34,6 +36,10 @@ public class SettingsActivity extends BaseActivity {
     private Button clearCacheButton;
     private SwitchMaterial dynamicColorSwitch;
     private SwitchMaterial materialYouSwitch;
+    private ChipGroup platformChipGroup;
+    private Chip windowsChip;
+    private Chip linuxChip;
+    private Chip macChip;
     
     private PreferencesManager preferencesManager;
     private DatabaseHelper databaseHelper;
@@ -72,6 +78,10 @@ public class SettingsActivity extends BaseActivity {
         clearCacheButton = findViewById(R.id.clearCacheButton);
         dynamicColorSwitch = findViewById(R.id.dynamicColorSwitch);
         materialYouSwitch = findViewById(R.id.materialYouSwitch);
+        platformChipGroup = findViewById(R.id.platformChipGroup);
+        windowsChip = findViewById(R.id.windowsChip);
+        linuxChip = findViewById(R.id.linuxChip);
+        macChip = findViewById(R.id.macChip);
     }
     
     private void initializeManagers() {
@@ -120,6 +130,10 @@ public class SettingsActivity extends BaseActivity {
             preferencesManager.setMaterialYou(isChecked);
             recreate();
         });
+
+        platformChipGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            savePlatformPreferences();
+        });
     }
     
     private void loadCurrentSettings() {
@@ -151,8 +165,28 @@ public class SettingsActivity extends BaseActivity {
         dynamicColorSwitch.setChecked(preferencesManager.isDynamicThemingEnabled());
         materialYouSwitch.setChecked(preferencesManager.isMaterialYouEnabled());
         isProgrammaticChange = false;
+
+        // Carregar configurações de plataforma
+        java.util.Set<String> selectedPlatforms = preferencesManager.getSelectedPlatforms();
+        windowsChip.setChecked(selectedPlatforms.contains("windows"));
+        linuxChip.setChecked(selectedPlatforms.contains("linux"));
+        macChip.setChecked(selectedPlatforms.contains("mac"));
         
         android.util.Log.d("SettingsActivity", "=== SETTINGS LOADING COMPLETE ===");
+    }
+
+    private void savePlatformPreferences() {
+        java.util.Set<String> selectedPlatforms = new java.util.HashSet<>();
+        if (windowsChip.isChecked()) {
+            selectedPlatforms.add("windows");
+        }
+        if (linuxChip.isChecked()) {
+            selectedPlatforms.add("linux");
+        }
+        if (macChip.isChecked()) {
+            selectedPlatforms.add("mac");
+        }
+        preferencesManager.setSelectedPlatforms(selectedPlatforms);
     }
     
     private void openFolderPicker() {

@@ -20,6 +20,7 @@ public class PreferencesManager {
     private static final String KEY_LOGIN_TIME = "login_time";
     private static final String KEY_DYNAMIC_THEMING = "dynamic_theming";
     private static final String KEY_MATERIAL_YOU = "material_you";
+    private static final String KEY_SELECTED_PLATFORMS = "selected_platforms";
     
     private SharedPreferences preferences;
     private SharedPreferences.Editor editor;
@@ -143,6 +144,21 @@ public class PreferencesManager {
 
     public boolean isMaterialYouEnabled() {
         return preferences.getBoolean(KEY_MATERIAL_YOU, true); // Default to true
+    }
+
+    // Métodos de plataforma
+    public void setSelectedPlatforms(java.util.Set<String> platforms) {
+        editor.putStringSet(KEY_SELECTED_PLATFORMS, platforms);
+        editor.apply();
+    }
+
+    public java.util.Set<String> getSelectedPlatforms() {
+        // Default to all platforms selected
+        java.util.Set<String> defaultPlatforms = new java.util.HashSet<>();
+        defaultPlatforms.add("windows");
+        defaultPlatforms.add("linux");
+        defaultPlatforms.add("mac");
+        return preferences.getStringSet(KEY_SELECTED_PLATFORMS, defaultPlatforms);
     }
     
     // Métodos de download com SAF

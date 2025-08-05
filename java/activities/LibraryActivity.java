@@ -1093,6 +1093,15 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     }
 
     private void showDownloadSelectionDialog(Game game, List<DownloadLink> downloadLinks) {
+        // Filter download links based on selected platforms
+        java.util.Set<String> selectedPlatforms = preferencesManager.getSelectedPlatforms();
+        List<DownloadLink> filteredLinks = new ArrayList<>();
+        for (DownloadLink link : downloadLinks) {
+            if (selectedPlatforms.contains(link.getPlatform().name().toLowerCase())) {
+                filteredLinks.add(link);
+            }
+        }
+
         com.google.android.material.dialog.MaterialAlertDialogBuilder builder = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this);
         LayoutInflater inflater = this.getLayoutInflater();
         View dialogView = inflater.inflate(R.layout.dialog_download_selection, null);
@@ -1113,7 +1122,7 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
         // Configurar RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         
-        DownloadLinkAdapter adapter = new DownloadLinkAdapter(this, downloadLinks, selectedLinks -> {
+        DownloadLinkAdapter adapter = new DownloadLinkAdapter(this, filteredLinks, selectedLinks -> {
             // Atualizar informações de seleção
             int selectedCount = selectedLinks.size();
             long totalSize = 0;
