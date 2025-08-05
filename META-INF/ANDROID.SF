@@ -1,0 +1,185 @@
+Signature-Version: 1.0
+Created-By: Android Gradle 8.0.2
+SHA1-Digest-Manifest: ljKLry9sKPeJFbOUVe0STS0ZV9A=
+X-Android-APK-Signed: 2,3
+
+Name: AndroidManifest.xml
+SHA1-Digest: /qSk6jEUEBG+AAC7rHvBHyYdP8s=
+
+Name: build.gradle
+SHA1-Digest: 0XbTz2T/lr9NiBb/pY5ZP4lcsY4=
+
+Name: java/activities/BaseActivity.java
+SHA1-Digest: odJhGwwcdsXWqcABh2Er6fucY3c=
+
+Name: java/activities/FolderSelectionActivity.java
+SHA1-Digest: 3QE905YycHtNWD4lCzujmlXBxyM=
+
+Name: java/activities/LibraryActivity.java
+SHA1-Digest: gSMzNi+adpg3uuXv3Z4BQ5USils=
+
+Name: java/activities/LibraryActivity.java.backup
+SHA1-Digest: g/AFjyISh2SE6w3TG4jXS6QPkII=
+
+Name: java/activities/LoginActivity.java
+SHA1-Digest: 984F/Ckp8HqDj847qcB7PaTS698=
+
+Name: java/activities/OAuthWebViewActivity.java
+SHA1-Digest: jtSwtWrQtXnWUFSfgqHh2Ge2es8=
+
+Name: java/activities/SettingsActivity.java
+SHA1-Digest: FubBVZsNLyzQGL9rKKhj/tAr8LQ=
+
+Name: java/adapters/DownloadLinkAdapter.java
+SHA1-Digest: zEHfQRj5bfKM4MIeNjzWwX1I3G8=
+
+Name: java/adapters/GamesAdapter.java
+SHA1-Digest: e8/2XVRdb34XVhnc9OVM6NAjwtI=
+
+Name: java/api/GOGAuthManager.java
+SHA1-Digest: 8kbYRNOPGO6abvBxS3R66KUlM+0=
+
+Name: java/api/GOGLibraryManager.java
+SHA1-Digest: 4gtgUPfjU1t5hW20dBfEqSoooFM=
+
+Name: java/application/GOGDownloaderApplication.java
+SHA1-Digest: d1y8ZzZ6Gw/0YChB1t7HP4YVXhA=
+
+Name: java/database/DatabaseHelper.java
+SHA1-Digest: ELd7DOuO39FAUTJts5+cHNi6Seg=
+
+Name: java/dialogs/FolderPickerDialogFragment.java
+SHA1-Digest: kl0i4C2O4Sk9DUO488Fe4ZJ8d30=
+
+Name: java/models/DownloadLink.java
+SHA1-Digest: VlcYGwIhikG48Sm2rZzQOXnOZCs=
+
+Name: java/models/Game.java
+SHA1-Digest: Rn5/tVWwf2QNiix5gWaJCJS/SFg=
+
+Name: java/services/DownloadService.java
+SHA1-Digest: uRyAZdgJ/efC541L2cn7BSDrNYs=
+
+Name: java/services/InstallationService.java
+SHA1-Digest: aIsnq/rhLKsBuFGmJfb0UDCS6Tw=
+
+Name: java/utils/DynamicColorManager.java
+SHA1-Digest: /QPK94sWdbjZcAyxFuB+AvUhVbs=
+
+Name: java/utils/DynamicColorTester.java
+SHA1-Digest: 2Jt7CuvQQN5zKmD8ZK+3gSZFdXs=
+
+Name: java/utils/ImageLoader.java
+SHA1-Digest: iVIriB1bcALzfyIdxDqSYqS+icw=
+
+Name: java/utils/PermissionHelper.java
+SHA1-Digest: C/c1/nwYP/JRf/Vmjobt0bHPrJU=
+
+Name: java/utils/PreferencesManager.java
+SHA1-Digest: zvvHdqXoXS4k5XZWrXEB/NzwrWY=
+
+Name: java/utils/SAFDownloadManager.java
+SHA1-Digest: 9z+oTsv0/zann5ZxgTg2GSVLs8s=
+
+Name: java/utils/SpeedMeter.class
+SHA1-Digest: UvrtaeIUay/Rse4Kua+XT/wKMI0=
+
+Name: java/utils/SpeedMeter.java
+SHA1-Digest: NIRCtyvpowL/Mh77idRhiMcBHJQ=
+
+Name: java/utils/SpeedMeterTest.class
+SHA1-Digest: Pcos5foFPSxgbHrJz6GAhDOLZGQ=
+
+Name: resource/drawable/bg_chip.xml
+SHA1-Digest: nvvKVj39LPnUmiBIgVCrIeTgI/0=
+
+Name: resource/drawable/ic_account_circle.xml
+SHA1-Digest: MbAkdO2L3HvUSs9V0UvsyRC6KuQ=
+
+Name: resource/drawable/ic_arrow_back.xml
+SHA1-Digest: TMx3vHPMedwM7sxqS1YOSzskPas=
+
+Name: resource/drawable/ic_error.xml
+SHA1-Digest: mPppbn8ztxrTSGthgfVfxj7o9kw=
+
+Name: resource/drawable/ic_file.xml
+SHA1-Digest: HYtg5ZTCESfP0gthNTzFF8CL7wQ=
+
+Name: resource/drawable/ic_folder.xml
+SHA1-Digest: ZKerfDcKgI9WccDYg/iOU1Dybxs=
+
+Name: resource/drawable/ic_image.xml
+SHA1-Digest: SiDxteCMG5GZqf6ENEZbMRVRWVw=
+
+Name: resource/drawable/ic_search.xml
+SHA1-Digest: /Km64WfdpRkWHk7qxZ+04G3LW1w=
+
+Name: resource/drawable/ic_security.xml
+SHA1-Digest: QTQ4eKTNgmRKL4sG+oHVayilkX4=
+
+Name: resource/drawable/ic_settings.xml
+SHA1-Digest: CXH3f37tW3Puj0eZsRiI+CEJFTY=
+
+Name: resource/drawable/image_border.xml
+SHA1-Digest: lAHmOfkC+KWa42I/NzRjSaWidXw=
+
+Name: resource/layout/activity_folder_selection.xml
+SHA1-Digest: Z2IitKY3SpSPOGo41YwW9KKiKvA=
+
+Name: resource/layout/activity_library.xml
+SHA1-Digest: SFCtO/4NbsKY2F7wkvQ0a8YTkHA=
+
+Name: resource/layout/activity_login.xml
+SHA1-Digest: nPlEEA0+Rj4yPhIUCFLjfl9jqSY=
+
+Name: resource/layout/activity_oauth_webview.xml
+SHA1-Digest: 451Wo8yo6/nmS3PMDXyYeSsVR6c=
+
+Name: resource/layout/activity_settings.xml
+SHA1-Digest: q//bWCuLSYtZ2q4rbporpfvsUnA=
+
+Name: resource/layout/dialog_download_selection.xml
+SHA1-Digest: CyopN25N6Jao+8SxN4E+IdOtEJg=
+
+Name: resource/layout/dialog_folder_picker.xml
+SHA1-Digest: C4FkC5+h8vtrjZG3cmy9LafdF1c=
+
+Name: resource/layout/dialog_install_progress.xml
+SHA1-Digest: 2amkdoZjgjhDUHleGqaaIOF27Lw=
+
+Name: resource/layout/item_download_link.xml
+SHA1-Digest: Omc30aRQEsoIKva7iwIGyLxyMCE=
+
+Name: resource/layout/item_game.xml
+SHA1-Digest: q6TJ6l5fsFEhSfq/2ojpXH0CyW0=
+
+Name: resource/layout/list_item_folder.xml
+SHA1-Digest: dP/GPnAThuvP+STQk1aa8vRua2Y=
+
+Name: resource/menu/menu_library.xml
+SHA1-Digest: erZzn37e5JaDq2TpjoVGJIxCyeo=
+
+Name: resource/values-night-v31/themes.xml
+SHA1-Digest: uGJGULB3u7S+mVchsZ9WtejwDs4=
+
+Name: resource/values-night/themes.xml
+SHA1-Digest: mIC6qH8gtIbjikXrk53g8Jvz8EY=
+
+Name: resource/values-v31/themes.xml
+SHA1-Digest: 41HWjj2yrJ9YPIKWDN4KCRaYP/I=
+
+Name: resource/values/colors.xml
+SHA1-Digest: HnxQd/JtBxAg6p1aAaM7M6X97oY=
+
+Name: resource/values/plurals.xml
+SHA1-Digest: qpcpwhTt8pK5Bn+JOAWmso1S2QA=
+
+Name: resource/values/strings.xml
+SHA1-Digest: DexhjhfsSsTqk13waVQ+uAb8vzk=
+
+Name: resource/values/styles.xml
+SHA1-Digest: I1GV/t3bFXsPQw8nn3s/kZtn1fw=
+
+Name: resource/values/themes.xml
+SHA1-Digest: KmcvMZwKu8gPOq/NlJOiqqRCsYQ=
+
