@@ -32,6 +32,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -89,7 +92,7 @@ public class DownloadService extends Service {
     
     private NotificationManager notificationManager;
     private ExecutorService executorService;
-    private Map<Long, MasterDownloadTask> activeDownloads;
+    private Map<Long, DownloadTask> activeDownloads;
     private Map<Long, BatchDownloadTask> activeBatchDownloads;
     private Set<Long> autoPausedDownloads;
     private NetworkChangeReceiver networkChangeReceiver;
@@ -313,7 +316,7 @@ public class DownloadService extends Service {
             @Override
             public void onSuccess(String downloadUrl) {
                 downloadLink.setDownloadUrl(downloadUrl);
-                MasterDownloadTask task = new MasterDownloadTask(game, downloadLink, downloadId, 0, 1, null);
+                DownloadTask task = new DownloadTask(game, downloadLink, downloadId, null);
                 activeDownloads.put(game.getId(), task);
                 executorService.execute(task);
             }
@@ -345,10 +348,10 @@ public class DownloadService extends Service {
         }
         databaseHelper.createDownloadBatch(game.getId(), downloadLinks.size(), linksJson);
         
-        showBatchDownloadNotification(game, 0, "Iniciando downloads...");
+        showBatchDownloadNotification(game, 0, downloadLinks.size(), "Iniciando downloads...");
         
         startForeground(NOTIFICATION_ID + (int) game.getId(),
-                createBatchDownloadNotification(game, 0, "Iniciando downloads..."));
+                createBatchDownloadNotification(game, 0, downloadLinks.size(), "Iniciando downloads..."));
         
         BatchDownloadTask batchTask = new BatchDownloadTask(game, downloadLinks);
         activeBatchDownloads.put(game.getId(), batchTask);
@@ -456,113 +459,6 @@ public class DownloadService extends Service {
             }
         } catch (Exception e) {
             Log.e(TAG, "Error resuming batch download for game: " + game.getTitle(), e);
-        }
-    }
-
-    private class SegmentDownloadTask implements Runnable {
-        private final String url;
-        private final ContentValues segment;
-        private volatile boolean cancelled = false;
-        private volatile boolean paused = false;
-
-        public SegmentDownloadTask(String url, ContentValues segment) {
-            this.url = url;
-            this.segment = segment;
-        }
-
-        @Override
-        public void run() {
-            long segmentId = segment.getAsLong("id");
-            databaseHelper.updateSegmentStatus(segmentId, "DOWNLOADING");
-
-            Exception lastException = null;
-            final int MAX_RETRIES = 3;
-            long retryDelay = 2000;
-
-            for (int i = 0; i < MAX_RETRIES; i++) {
-                if (paused || cancelled) break;
-
-                try {
-                    boolean success = downloadSegment();
-                    if (success) {
-                        lastException = null;
-                        break;
-                    }
-                } catch (IOException e) {
-                    lastException = e;
-                    if (e.getMessage() != null && e.getMessage().contains("Unrecoverable")) {
-                        // Break immediately for client-side errors
-                        break;
-                    }
-                }
-
-                Log.w(TAG, String.format("Segment download attempt %d/%d failed: %s",
-                        i + 1, MAX_RETRIES, lastException.getMessage()));
-
-                if (i < MAX_RETRIES - 1) {
-                    try {
-                        Thread.sleep(retryDelay);
-                        retryDelay *= 2;
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            }
-
-            if (lastException == null && !paused && !cancelled) {
-                databaseHelper.updateSegmentStatus(segmentId, "COMPLETED");
-                // TODO: Notify MasterTask of completion
-            } else {
-                Log.e(TAG, "Segment " + segmentId + " download failed permanently", lastException);
-                databaseHelper.updateSegmentStatus(segmentId, "FAILED");
-                // TODO: Notify MasterTask of failure
-            }
-        }
-
-        private boolean downloadSegment() throws IOException {
-            long segmentId = segment.getAsLong("id");
-            int segmentIndex = segment.getAsInteger("segment_index");
-            long startByte = segment.getAsLong("start_byte");
-            long endByte = segment.getAsLong("end_byte");
-            long downloadedBytes = databaseHelper.getDownloadSegments(downloadId).get(segmentIndex).getAsLong("downloaded_bytes");
-
-            DocumentFile segmentFile = safDownloadManager.createTempSegmentFile(game, downloadLink, segmentIndex);
-            if (segmentFile == null) {
-                throw new IOException("Failed to create segment file.");
-            }
-
-            Request request = new Request.Builder()
-                .url(url)
-                .header("Range", "bytes=" + (startByte + downloadedBytes) + "-" + endByte)
-                .get()
-                .build();
-
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (!response.isSuccessful() && response.code() != 206) {
-                    if (response.code() >= 400 && response.code() < 500) {
-                        throw new IOException("Unrecoverable HTTP error: " + response.code());
-                    }
-                    throw new IOException("Unexpected HTTP code " + response);
-                }
-
-                try (InputStream inputStream = response.body().byteStream();
-                     OutputStream outputStream = safDownloadManager.getOutputStream(segmentFile, true)) {
-
-                    byte[] buffer = new byte[128 * 1024];
-                    int bytesRead;
-                    long currentDownloadedBytes = downloadedBytes;
-
-                    while ((bytesRead = inputStream.read(buffer)) != -1 && !cancelled && !paused) {
-                        outputStream.write(buffer, 0, bytesRead);
-                        currentDownloadedBytes += bytesRead;
-                        databaseHelper.updateSegmentProgress(segmentId, currentDownloadedBytes);
-                        // TODO: Notify MasterTask of progress
-                    }
-
-                    return !paused && !cancelled;
-                }
-            }
         }
     }
 
@@ -689,16 +585,15 @@ public class DownloadService extends Service {
         // Atualizar notificação
         String progressText;
         if (totalFiles > 1) {
+            // Batch download
             String speedText = speed > 0 ? String.format(" - %.1f MB/s", speed / (1024 * 1024)) : "";
             String etaText = eta > 0 ? String.format(" - ETA: %s", formatETA(eta)) : "";
-            progressText = String.format("Baixando (%d/%d) - %s / %s%s%s",
-                    currentFileIndex,
-                    totalFiles,
+            progressText = String.format("Arquivo %d/%d - %d%% - %s / %s%s%s",
+                    currentFileIndex + 1, totalFiles, progress,
                     Game.formatFileSize(bytesDownloaded),
                     Game.formatFileSize(totalBytes),
-                    speedText,
-                    etaText);
-            showBatchDownloadNotification(game, progress, progressText);
+                    speedText, etaText);
+            showBatchDownloadNotification(game, currentFileIndex, totalFiles, progressText);
         } else {
             // Single download
             String speedText = speed > 0 ? String.format(" - %.1f MB/s", speed / (1024 * 1024)) : "";
@@ -842,12 +737,12 @@ public class DownloadService extends Service {
         notificationManager.notify(NOTIFICATION_ID + (int) game.getId(), notification);
     }
     
-    private void showBatchDownloadNotification(Game game, int progress, String progressText) {
-        Notification notification = createBatchDownloadNotification(game, progress, progressText);
+    private void showBatchDownloadNotification(Game game, int currentFileIndex, int totalFiles, String progressText) {
+        Notification notification = createBatchDownloadNotification(game, currentFileIndex, totalFiles, progressText);
         notificationManager.notify(NOTIFICATION_ID + (int) game.getId(), notification);
     }
     
-    private Notification createBatchDownloadNotification(Game game, int progress, String progressText) {
+    private Notification createBatchDownloadNotification(Game game, int currentFileIndex, int totalFiles, String progressText) {
         Intent intent = new Intent(this, LibraryActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
@@ -856,11 +751,13 @@ public class DownloadService extends Service {
         PendingIntent cancelPendingIntent = PendingIntent.getService(this, (int) game.getId(), 
                 cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         
+        int overallProgress = totalFiles > 0 ? (int) (((currentFileIndex * 100.0) / totalFiles)) : 0;
+
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(getString(R.string.downloading_game, game.getTitle()))
                 .setContentText(progressText)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
-                .setProgress(100, progress, false)
+                .setProgress(100, overallProgress, false)
                 .setContentIntent(pendingIntent)
                 .addAction(android.R.drawable.ic_delete, 
                         getString(R.string.cancel), cancelPendingIntent)
@@ -874,18 +771,121 @@ public class DownloadService extends Service {
         void onComplete(String linkId, boolean success, String filePath);
     }
 
-    // Classe interna para gerenciar o download de um arquivo
-    private class MasterDownloadTask implements Runnable {
-        private Game game;
-        private DownloadLink downloadLink;
-        private long downloadId;
+    private class SegmentDownloadTask implements Runnable {
+        private final Game game;
+        private final DownloadLink downloadLink;
+        private final long downloadId;
+        private final String url;
+        private final ContentValues segment;
+        private volatile boolean cancelled = false;
+        private volatile boolean paused = false;
+
+        public SegmentDownloadTask(Game game, DownloadLink downloadLink, long downloadId, String url, ContentValues segment) {
+            this.game = game;
+            this.downloadLink = downloadLink;
+            this.downloadId = downloadId;
+            this.url = url;
+            this.segment = segment;
+        }
+
+        public void cancel() { this.cancelled = true; }
+        public void pause() { this.paused = true; }
+
+        @Override
+        public void run() {
+            try {
+                downloadSegmentWithRetries();
+            } catch (IOException e) {
+                Log.e(TAG, "Segment download failed permanently.", e);
+            }
+        }
+
+        private void downloadSegmentWithRetries() throws IOException {
+            long segmentId = segment.getAsLong("id");
+            databaseHelper.updateSegmentStatus(segmentId, "DOWNLOADING");
+            Exception lastException = null;
+            final int MAX_RETRIES = 3;
+            long retryDelay = 2000;
+
+            for (int i = 0; i < MAX_RETRIES; i++) {
+                if (paused || cancelled) break;
+
+                try {
+                    int segmentIndex = segment.getAsInteger("segment_index");
+                    long startByte = segment.getAsLong("start_byte");
+                    long endByte = segment.getAsLong("end_byte");
+                    long downloadedBytes = databaseHelper.getDownloadSegments(downloadId).get(segmentIndex).getAsLong("downloaded_bytes");
+
+                    DocumentFile segmentFile = safDownloadManager.createTempSegmentFile(game, downloadLink, segmentIndex);
+                    if (segmentFile == null) throw new IOException("Failed to create segment file.");
+
+                    Request request = new Request.Builder()
+                        .url(url)
+                        .header("Range", "bytes=" + (startByte + downloadedBytes) + "-" + endByte)
+                        .get()
+                        .build();
+
+                    try (Response response = httpClient.newCall(request).execute()) {
+                        if (!response.isSuccessful() && response.code() != 206) {
+                            if (response.code() >= 400 && response.code() < 500) {
+                                throw new IOException("Unrecoverable HTTP error: " + response.code());
+                            }
+                            throw new IOException("Unexpected HTTP code " + response);
+                        }
+
+                        try (InputStream inputStream = response.body().byteStream();
+                             OutputStream outputStream = safDownloadManager.getOutputStream(segmentFile, true)) {
+
+                            byte[] buffer = new byte[256 * 1024];
+                            int bytesRead;
+                            long currentDownloadedBytes = downloadedBytes;
+
+                            while ((bytesRead = inputStream.read(buffer)) != -1 && !cancelled && !paused) {
+                                outputStream.write(buffer, 0, bytesRead);
+                                currentDownloadedBytes += bytesRead;
+                                databaseHelper.updateSegmentProgress(segmentId, currentDownloadedBytes);
+                            }
+
+                            if (paused || cancelled) return;
+
+                            databaseHelper.updateSegmentStatus(segmentId, "COMPLETED");
+                            return;
+                        }
+                    }
+                } catch (IOException e) {
+                    lastException = e;
+                    if (e.getMessage() != null && e.getMessage().contains("Unrecoverable")) {
+                        break;
+                    }
+                }
+
+                Log.w(TAG, String.format("Segment download attempt %d/%d failed: %s", i + 1, MAX_RETRIES, lastException.getMessage()));
+                if (i < MAX_RETRIES - 1) {
+                    try {
+                        Thread.sleep(retryDelay);
+                        retryDelay *= 2;
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+            databaseHelper.updateSegmentStatus(segmentId, "FAILED");
+            throw new IOException("Segment download failed after all retries", lastException);
+        }
+    }
+
+    private class DownloadTask implements Runnable {
+        private final Game game;
+        private final DownloadLink downloadLink;
+        private final long downloadId;
         private volatile boolean cancelled = false;
         private volatile boolean paused = false;
         private final FileDownloadListener listener;
         private static final int SEGMENT_COUNT = 4;
         private final List<SegmentDownloadTask> segmentTasks = new ArrayList<>();
 
-        public DownloadTask(Game game, DownloadLink downloadLink, long downloadId, int currentFileIndex, int totalFiles, FileDownloadListener listener) {
+        public DownloadTask(Game game, DownloadLink downloadLink, long downloadId, FileDownloadListener listener) {
             this.game = game;
             this.downloadLink = downloadLink;
             this.downloadId = downloadId;
@@ -894,12 +894,16 @@ public class DownloadService extends Service {
 
         public void cancel() {
             cancelled = true;
-            segmentTasks.forEach(SegmentDownloadTask::cancel);
+            for(SegmentDownloadTask task : segmentTasks) {
+                task.cancel();
+            }
         }
 
         public void pause() {
             paused = true;
-            segmentTasks.forEach(SegmentDownloadTask::pause);
+            for(SegmentDownloadTask task : segmentTasks) {
+                task.pause();
+            }
         }
 
         @Override
@@ -919,7 +923,7 @@ public class DownloadService extends Service {
 
                 ExecutorCompletionService<Boolean> completionService = new ExecutorCompletionService<>(executorService);
                 for (ContentValues segment : segments) {
-                    SegmentDownloadTask task = new SegmentDownloadTask(downloadLink.getDownloadUrl(), segment);
+                    SegmentDownloadTask task = new SegmentDownloadTask(game, downloadLink, downloadId, downloadLink.getDownloadUrl(), segment);
                     segmentTasks.add(task);
                     completionService.submit(task, true);
                 }
@@ -928,23 +932,26 @@ public class DownloadService extends Service {
                 for (int i = 0; i < segments.size(); i++) {
                     try {
                         Future<Boolean> result = completionService.take();
-                        if (result.get()) {
-                            successCount++;
-                        }
+                        result.get();
+                        successCount++;
                     } catch (Exception e) {
-                        Log.e(TAG, "A segment failed", e);
+                        Log.e(TAG, "A segment failed to complete", e);
                     }
                 }
 
                 if (successCount == SEGMENT_COUNT) {
                     String finalPath = assembleParts();
-                    onDownloadComplete(game, downloadId, finalPath);
+                    if (listener != null) {
+                        listener.onComplete(downloadLink.getId(), true, finalPath);
+                    } else {
+                        onDownloadComplete(game, downloadId, finalPath);
+                    }
                 } else {
                     throw new IOException(SEGMENT_COUNT - successCount + " segments failed to download.");
                 }
 
             } catch (Exception e) {
-                Log.e(TAG, "MasterDownloadTask failed", e);
+                Log.e(TAG, "DownloadTask (Master) failed", e);
                 onDownloadError(game, e.getMessage());
             }
         }
@@ -956,7 +963,7 @@ public class DownloadService extends Service {
                 for (int i = 0; i < SEGMENT_COUNT; i++) {
                     DocumentFile partFile = safDownloadManager.createTempSegmentFile(game, downloadLink, i);
                     try (InputStream partIs = safDownloadManager.getInputStream(partFile)) {
-                        byte[] buffer = new byte[1024 * 1024]; // 1MB buffer
+                        byte[] buffer = new byte[1024 * 1024];
                         int bytesRead;
                         while ((bytesRead = partIs.read(buffer)) != -1) {
                             finalOs.write(buffer, 0, bytesRead);
@@ -971,7 +978,7 @@ public class DownloadService extends Service {
         private long getTotalSize() throws IOException {
             Request request = new Request.Builder()
                 .url(downloadLink.getDownloadUrl())
-                .head() // Use HEAD request to get only headers
+                .head()
                 .build();
 
             try (Response response = httpClient.newCall(request).execute()) {
@@ -980,7 +987,6 @@ public class DownloadService extends Service {
                 }
                 long size = response.body().contentLength();
                 if (size <= 0) {
-                    // Fallback to GET if HEAD is not supported or returns 0
                     return downloadLink.getSize();
                 }
                 return size;
@@ -988,11 +994,10 @@ public class DownloadService extends Service {
         }
     }
 
-    // Classe interna para gerenciar download de múltiplos arquivos
     private class BatchDownloadTask implements Runnable, FileDownloadListener {
         private final Game game;
         private final List<DownloadLink> downloadLinks;
-        private final List<MasterDownloadTask> childTasks = new ArrayList<>();
+        private final List<DownloadTask> childTasks = new ArrayList<>();
         private volatile boolean cancelled = false;
         private volatile boolean paused = false;
         
@@ -1009,12 +1014,16 @@ public class DownloadService extends Service {
 
         public void cancel() {
             cancelled = true;
-            childTasks.forEach(MasterDownloadTask::cancel);
+            for (DownloadTask task : childTasks) {
+                task.cancel();
+            }
         }
 
         public void pause() {
             paused = true;
-            childTasks.forEach(MasterDownloadTask::pause);
+            for (DownloadTask task : childTasks) {
+                task.pause();
+            }
         }
 
         @Override
@@ -1027,7 +1036,8 @@ public class DownloadService extends Service {
                     String downloadUrl = getUrl(link);
                     if (downloadUrl != null) {
                         link.setDownloadUrl(downloadUrl);
-                        MasterDownloadTask task = new MasterDownloadTask(game, link, -1, i, downloadLinks.size(), this);
+                        long downloadId = databaseHelper.insertDownload(game.getId(), link.getId(), link.getFileName(), downloadUrl);
+                        DownloadTask task = new DownloadTask(game, link, downloadId, this);
                         childTasks.add(task);
                         executorService.execute(task);
                     } else {
@@ -1053,15 +1063,12 @@ public class DownloadService extends Service {
             if (completed == downloadLinks.size()) {
                 Log.d(TAG, "Todos os arquivos do lote foram processados para: " + game.getTitle());
                 if (cancelled) {
-                    // Cleanup is handled by the main cancel call
                     return;
                 }
                 if (paused) {
-                     // This state should ideally not be reached if all tasks are complete
                     return;
                 }
                 
-                // Batch is finished
                 activeBatchDownloads.remove(game.getId());
 
                 ContentValues batch = databaseHelper.getDownloadBatch(game.getId());
@@ -1084,18 +1091,19 @@ public class DownloadService extends Service {
             
             long totalBatchDownloaded = fileProgress.values().stream().mapToLong(Long::longValue).sum();
             
-            // For overall speed, we could sum speeds, but it's complex. For now, let's show total progress.
-            double overallSpeed = childTasks.stream().mapToDouble(t -> t.speedMeter.getCurrentSpeed()).sum();
+            double overallSpeed = 0;
+            for (DownloadTask task : childTasks) {
+                overallSpeed += task.speedMeter.getCurrentSpeed();
+            }
+
             long overallEta = (totalBatchSizeBytes - totalBatchDownloaded > 0 && overallSpeed > 0)
                 ? (long) ((totalBatchSizeBytes - totalBatchDownloaded) / overallSpeed)
                 : 0;
 
-            // Notify overall batch progress
             onDownloadProgress(game, totalBatchDownloaded, totalBatchSizeBytes, completedFileCount.get(), downloadLinks.size(), overallSpeed, overallEta);
         }
 
         private String getUrl(DownloadLink link) throws InterruptedException {
-            // Same as before
             final String[] downloadUrl = new String[1];
             final String[] errorMessage = new String[1];
             final Object lock = new Object();

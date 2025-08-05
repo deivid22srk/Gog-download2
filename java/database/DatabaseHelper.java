@@ -28,6 +28,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     // Table names
     private static final String TABLE_GAMES = "games";
     private static final String TABLE_DOWNLOADS = "downloads";
+    private static final String TABLE_DOWNLOAD_SEGMENTS = "download_segments";
     
     // Games table columns
     private static final String COLUMN_GAME_ID = "id";
@@ -135,7 +136,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         ")";
 
     // Segments table
-    private static final String TABLE_DOWNLOAD_SEGMENTS = "download_segments";
     private static final String COLUMN_SEGMENT_ID = "id";
     private static final String COLUMN_SEGMENT_DOWNLOAD_ID = "download_id";
     private static final String COLUMN_SEGMENT_INDEX = "segment_index";
@@ -175,7 +175,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL("CREATE INDEX idx_downloads_link_id ON " + TABLE_DOWNLOADS + "(" + COLUMN_DOWNLOAD_LINK_ID + ")");
         db.execSQL("CREATE INDEX idx_batches_game_id ON " + TABLE_DOWNLOAD_BATCHES + "(" + COLUMN_BATCH_GAME_ID + ")");
         db.execSQL("CREATE INDEX idx_batches_status ON " + TABLE_DOWNLOAD_BATCHES + "(" + COLUMN_BATCH_STATUS + ")");
-        db.execSQL("CREATE INDEX idx_segments_download_id ON " + TABLE_DOWNLOAD_SEGMENTS + "(download_id)");
+        db.execSQL("CREATE INDEX idx_segments_download_id ON " + TABLE_DOWNLOAD_SEGMENTS + "("+COLUMN_SEGMENT_DOWNLOAD_ID+")");
     }
     
     @Override
@@ -199,9 +199,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             Log.d(TAG, "Database upgraded successfully to version 3");
         }
         if (oldVersion < 4) {
-            // Migração da versão 3 para 4: adicionar tabela de segmentos
             db.execSQL(CREATE_TABLE_DOWNLOAD_SEGMENTS);
-            db.execSQL("CREATE INDEX idx_segments_download_id ON " + TABLE_DOWNLOAD_SEGMENTS + "(download_id)");
+            db.execSQL("CREATE INDEX idx_segments_download_id ON " + TABLE_DOWNLOAD_SEGMENTS + "("+COLUMN_SEGMENT_DOWNLOAD_ID+")");
             Log.d(TAG, "Database upgraded successfully to version 4");
         }
     }
@@ -545,7 +544,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 db.insert(TABLE_DOWNLOAD_SEGMENTS, null, values);
             }
             db.setTransactionSuccessful();
-            Log.d(TAG, "Created " + segmentCount + " segments for download ID: " + downloadId);
         } finally {
             db.endTransaction();
         }
@@ -695,5 +693,72 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             Log.e(TAG, "Error converting cursor to game", e);
             return null;
         }
+    }
+
+    // Métodos para gerenciar segmentos de download
+
+    public void createDownloadSegments(long downloadId, long totalSize, int segmentCount) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            long segmentSize = totalSize / segmentCount;
+            for (int i = 0; i < segmentCount; i++) {
+                ContentValues values = new ContentValues();
+                values.put(COLUMN_SEGMENT_DOWNLOAD_ID, downloadId);
+                values.put(COLUMN_SEGMENT_INDEX, i);
+                long startByte = i * segmentSize;
+                long endByte = (i == segmentCount - 1) ? totalSize - 1 : startByte + segmentSize - 1;
+                values.put(COLUMN_SEGMENT_START_BYTE, startByte);
+                values.put(COLUMN_SEGMENT_END_BYTE, endByte);
+                values.put(COLUMN_SEGMENT_DOWNLOADED_BYTES, 0);
+                values.put(COLUMN_SEGMENT_STATUS, "PENDING");
+                db.insert(TABLE_DOWNLOAD_SEGMENTS, null, values);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    public List<ContentValues> getDownloadSegments(long downloadId) {
+        List<ContentValues> segments = new ArrayList<>();
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.query(TABLE_DOWNLOAD_SEGMENTS, null,
+                COLUMN_SEGMENT_DOWNLOAD_ID + " = ?", new String[]{String.valueOf(downloadId)},
+                null, null, COLUMN_SEGMENT_INDEX + " ASC");
+
+        if (cursor != null) {
+            while (cursor.moveToNext()) {
+                ContentValues values = new ContentValues();
+                values.put("id", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_ID)));
+                values.put("download_id", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_DOWNLOAD_ID)));
+                values.put("segment_index", cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_INDEX)));
+                values.put("start_byte", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_START_BYTE)));
+                values.put("end_byte", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_END_BYTE)));
+                values.put("downloaded_bytes", cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_DOWNLOADED_BYTES)));
+                values.put("status", cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SEGMENT_STATUS)));
+                segments.add(values);
+            }
+            cursor.close();
+        }
+        return segments;
+    }
+
+    public boolean updateSegmentProgress(long segmentId, long downloadedBytes) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_SEGMENT_DOWNLOADED_BYTES, downloadedBytes);
+        int rowsAffected = db.update(TABLE_DOWNLOAD_SEGMENTS, values,
+                COLUMN_SEGMENT_ID + " = ?", new String[]{String.valueOf(segmentId)});
+        return rowsAffected > 0;
+    }
+
+    public boolean updateSegmentStatus(long segmentId, String status) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_SEGMENT_STATUS, status);
+        int rowsAffected = db.update(TABLE_DOWNLOAD_SEGMENTS, values,
+                COLUMN_SEGMENT_ID + " = ?", new String[]{String.valueOf(segmentId)});
+        return rowsAffected > 0;
     }
 }
