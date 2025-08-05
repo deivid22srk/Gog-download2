@@ -251,6 +251,22 @@ public class SAFDownloadManager {
         
         return false;
     }
+
+    /**
+     * Finds a file for a given game and download link.
+     * @return The DocumentFile if found, otherwise null.
+     */
+    public DocumentFile findFile(Game game, DownloadLink downloadLink) {
+        DocumentFile gameDir = createGameDirectory(game);
+        if (gameDir == null) {
+            return null;
+        }
+        String fileName = sanitizeFileName(downloadLink.getFileName());
+        if (fileName == null || fileName.isEmpty()) {
+            return null;
+        }
+        return gameDir.findFile(fileName);
+    }
     
     /**
      * Lista todos os arquivos de um jogo
