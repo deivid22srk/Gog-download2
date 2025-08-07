@@ -71,6 +71,14 @@
                         android:text="Change Folder"
                         style="@style/Widget.Material3.Button.TonalButton" />
 
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/use1DMSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Download com 1DM/1DM+"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:layout_marginTop="16dp" />
+
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>

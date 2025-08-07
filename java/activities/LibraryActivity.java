@@ -1148,14 +1148,39 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
             Set<DownloadLink> selectedLinks = adapter.getSelectedLinks();
             if (!selectedLinks.isEmpty()) {
                 dialog.dismiss();
-                if (!safDownloadManager.hasDownloadLocationConfigured()) {
-                    Log.d("LibraryActivity", "No download folder configured, requesting selection");
-                    pendingDownloadGame = game;
-                    // Converter Set para List para o pending download
-                    pendingSelectedLinks = new ArrayList<>(selectedLinks);
-                    showFolderSelectionDialog();
+                if (preferencesManager.is1DMEnabled()) {
+                    // Download with 1DM
+                    for (DownloadLink link : selectedLinks) {
+                        libraryManager.getDownloadLink(game.getId(), link, "installer", new GOGLibraryManager.DownloadLinkCallback() {
+                            @Override
+                            public void onSuccess(String downloadUrl) {
+                                Intent intent = new Intent(Intent.ACTION_VIEW);
+                                intent.setData(Uri.parse(downloadUrl));
+                                intent.setPackage("idm.internet.download.manager");
+                                try {
+                                    startActivity(intent);
+                                } catch (Exception e) {
+                                    Toast.makeText(LibraryActivity.this, "Error launching 1DM. Is it installed?", Toast.LENGTH_SHORT).show();
+                                }
+                            }
+
+                            @Override
+                            public void onError(String error) {
+                                Toast.makeText(LibraryActivity.this, "Error getting download link: " + error, Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    }
                 } else {
-                    startMultipleDownloads(game, selectedLinks);
+                    // Download with built-in downloader
+                    if (!safDownloadManager.hasDownloadLocationConfigured()) {
+                        Log.d("LibraryActivity", "No download folder configured, requesting selection");
+                        pendingDownloadGame = game;
+                        // Converter Set para List para o pending download
+                        pendingSelectedLinks = new ArrayList<>(selectedLinks);
+                        showFolderSelectionDialog();
+                    } else {
+                        startMultipleDownloads(game, selectedLinks);
+                    }
                 }
             }
         });

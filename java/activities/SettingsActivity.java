@@ -36,6 +36,7 @@ public class SettingsActivity extends BaseActivity {
     private Button clearCacheButton;
     private SwitchMaterial dynamicColorSwitch;
     private SwitchMaterial materialYouSwitch;
+    private SwitchMaterial use1DMSwitch;
     private ChipGroup platformChipGroup;
     private Chip windowsChip;
     private Chip linuxChip;
@@ -78,6 +79,7 @@ public class SettingsActivity extends BaseActivity {
         clearCacheButton = findViewById(R.id.clearCacheButton);
         dynamicColorSwitch = findViewById(R.id.dynamicColorSwitch);
         materialYouSwitch = findViewById(R.id.materialYouSwitch);
+        use1DMSwitch = findViewById(R.id.use1DMSwitch);
         platformChipGroup = findViewById(R.id.platformChipGroup);
         windowsChip = findViewById(R.id.windowsChip);
         linuxChip = findViewById(R.id.linuxChip);
@@ -131,6 +133,11 @@ public class SettingsActivity extends BaseActivity {
             recreate();
         });
 
+        use1DMSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isProgrammaticChange) return;
+            preferencesManager.setUse1DM(isChecked);
+        });
+
         windowsChip.setOnCheckedChangeListener((buttonView, isChecked) -> savePlatformPreferences());
         linuxChip.setOnCheckedChangeListener((buttonView, isChecked) -> savePlatformPreferences());
         macChip.setOnCheckedChangeListener((buttonView, isChecked) -> savePlatformPreferences());
@@ -164,6 +171,7 @@ public class SettingsActivity extends BaseActivity {
         isProgrammaticChange = true;
         dynamicColorSwitch.setChecked(preferencesManager.isDynamicThemingEnabled());
         materialYouSwitch.setChecked(preferencesManager.isMaterialYouEnabled());
+        use1DMSwitch.setChecked(preferencesManager.is1DMEnabled());
         isProgrammaticChange = false;
 
         // Carregar configurações de plataforma
