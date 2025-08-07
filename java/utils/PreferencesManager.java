@@ -21,6 +21,7 @@ public class PreferencesManager {
     private static final String KEY_DYNAMIC_THEMING = "dynamic_theming";
     private static final String KEY_MATERIAL_YOU = "material_you";
     private static final String KEY_SELECTED_PLATFORMS = "selected_platforms";
+    private static final String KEY_USE_1DM = "use_1dm";
     
     private SharedPreferences preferences;
     private SharedPreferences.Editor editor;
@@ -144,6 +145,15 @@ public class PreferencesManager {
 
     public boolean isMaterialYouEnabled() {
         return preferences.getBoolean(KEY_MATERIAL_YOU, true); // Default to true
+    }
+
+    public void setUse1DM(boolean enabled) {
+        editor.putBoolean(KEY_USE_1DM, enabled);
+        editor.apply();
+    }
+
+    public boolean is1DMEnabled() {
+        return preferences.getBoolean(KEY_USE_1DM, false);
     }
 
     // Métodos de plataforma
