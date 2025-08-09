@@ -1301,7 +1301,9 @@ public class LibraryActivity extends BaseActivity implements GamesAdapter.OnGame
     
     @Override
     public void onGameClick(Game game) {
-        // TODO: Implement a proper game details screen
+        Intent intent = new Intent(this, GameDetailsActivity.class);
+        intent.putExtra(GameDetailsActivity.EXTRA_GAME_ID, game.getId());
+        startActivity(intent);
     }
     
     /**
