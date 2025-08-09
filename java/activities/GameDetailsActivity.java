@@ -140,7 +140,6 @@ public class GameDetailsActivity extends BaseActivity {
         switch (currentGame.getStatus()) {
             case NOT_DOWNLOADED:
             case FAILED:
-            case CANCELLED:
                 downloadSection.setVisibility(View.GONE);
                 fabDownload.setImageDrawable(ContextCompat.getDrawable(this, android.R.drawable.stat_sys_download));
                 break;
@@ -168,7 +167,6 @@ public class GameDetailsActivity extends BaseActivity {
             switch (currentGame.getStatus()) {
                 case NOT_DOWNLOADED:
                 case FAILED:
-                case CANCELLED:
                     // In a real app, you'd show a dialog to select files.
                     // For now, we'll just trigger a download for the first installer.
                     // This part needs to be replaced with the download selection dialog from LibraryActivity
