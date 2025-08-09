@@ -77,6 +77,13 @@
     android:exported="false"
     android:parentActivityName=".activities.LoginActivity" />
 
+<!-- Activity de Detalhes do Jogo -->
+<activity
+    android:name=".activities.GameDetailsActivity"
+    android:exported="false"
+    android:parentActivityName=".activities.LibraryActivity"
+    android:theme="@style/Theme.GOGDownloader.NoActionBar" />
+
 <!-- Activity de Configurações -->
 <activity
     android:name=".activities.SettingsActivity"
