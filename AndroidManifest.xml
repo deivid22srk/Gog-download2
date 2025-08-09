@@ -82,7 +82,7 @@
     android:name=".activities.GameDetailsActivity"
     android:exported="false"
     android:parentActivityName=".activities.LibraryActivity"
-    android:theme="@style/Theme.GOGDownloader.NoActionBar" />
+    android:theme="@style/Theme.GOGDownloader" />
 
 <!-- Activity de Configurações -->
 <activity
