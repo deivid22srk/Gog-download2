@@ -34,9 +34,11 @@ public class DownloadLink implements Serializable {
     private String language;
     private String version;
     private boolean isAvailable;
+    private long downloadedBytes;
     
     public DownloadLink() {
         this.isAvailable = true;
+        this.downloadedBytes = 0;
     }
     
     public DownloadLink(String id, String name, String url) {
@@ -112,11 +114,14 @@ public class DownloadLink implements Serializable {
         json.put("language", language);
         json.put("version", version);
         json.put("isAvailable", isAvailable);
+        json.put("downloadedBytes", downloadedBytes);
         
         return json;
     }
     
     // Getters e Setters
+    public long getDownloadedBytes() { return downloadedBytes; }
+    public void setDownloadedBytes(long downloadedBytes) { this.downloadedBytes = downloadedBytes; }
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     
@@ -238,6 +243,7 @@ public class DownloadLink implements Serializable {
                 jsonObject.put("name", link.getName());
                 jsonObject.put("url", link.getUrl());
                 jsonObject.put("size", link.getSize());
+                jsonObject.put("downloadedBytes", link.getDownloadedBytes());
                 // Não salvamos o fileName pois ele é derivado
                 jsonArray.put(jsonObject);
             }
@@ -262,6 +268,7 @@ public class DownloadLink implements Serializable {
                 link.setName(jsonObject.optString("name"));
                 link.setUrl(jsonObject.optString("url"));
                 link.setSize(jsonObject.optLong("size"));
+                link.setDownloadedBytes(jsonObject.optLong("downloadedBytes", 0));
                 links.add(link);
             }
             return links;

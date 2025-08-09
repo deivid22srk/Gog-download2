@@ -330,6 +330,24 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         
         return rowsAffected > 0;
     }
+
+    public boolean updateBatchState(long gameId, int completedFiles, String status, String linksJson) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+
+        values.put(COLUMN_BATCH_COMPLETED_FILES, completedFiles);
+        values.put(COLUMN_BATCH_STATUS, status);
+        values.put(COLUMN_BATCH_LINKS_JSON, linksJson);
+
+        if ("COMPLETED".equals(status) || "FAILED".equals(status) || "CANCELLED".equals(status)) {
+            values.put(COLUMN_BATCH_END_TIME, System.currentTimeMillis());
+        }
+
+        int rowsAffected = db.update(TABLE_DOWNLOAD_BATCHES, values,
+                COLUMN_BATCH_GAME_ID + " = ?", new String[]{String.valueOf(gameId)});
+
+        return rowsAffected > 0;
+    }
     
     public boolean updateDownloadStatus(long downloadId, String status, String errorMessage) {
         SQLiteDatabase db = this.getWritableDatabase();
