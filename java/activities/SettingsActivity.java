@@ -1,6 +1,7 @@
 package com.termux.activities;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -34,6 +35,7 @@ public class SettingsActivity extends BaseActivity {
     private TextView safPathText;
     private Button changeSafFolderButton;
     private Button clearCacheButton;
+    private Button iniciarTermuxButton;
     private SwitchMaterial dynamicColorSwitch;
     private SwitchMaterial materialYouSwitch;
     private SwitchMaterial use1DMSwitch;
@@ -77,6 +79,7 @@ public class SettingsActivity extends BaseActivity {
         safPathText = findViewById(R.id.safPathText);
         changeSafFolderButton = findViewById(R.id.changeSafFolderButton);
         clearCacheButton = findViewById(R.id.clearCacheButton);
+        iniciarTermuxButton = findViewById(R.id.iniciarTermuxButton);
         dynamicColorSwitch = findViewById(R.id.dynamicColorSwitch);
         materialYouSwitch = findViewById(R.id.materialYouSwitch);
         use1DMSwitch = findViewById(R.id.use1DMSwitch);
@@ -120,6 +123,7 @@ public class SettingsActivity extends BaseActivity {
     private void setupClickListeners() {
         changeSafFolderButton.setOnClickListener(v -> openFolderPicker());
         clearCacheButton.setOnClickListener(v -> showClearCacheConfirmation());
+        iniciarTermuxButton.setOnClickListener(v -> iniciarTermux());
 
         dynamicColorSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             if (isProgrammaticChange) return;
@@ -257,6 +261,12 @@ public class SettingsActivity extends BaseActivity {
         } catch (Exception e) {
             Toast.makeText(this, "Erro ao limpar cache: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void iniciarTermux() {
+        Intent intent = new Intent();
+        intent.setComponent(new ComponentName("com.termux", "com.termux.app.TermuxActivity"));
+        startActivity(intent);
     }
     
     
